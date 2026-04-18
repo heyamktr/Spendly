@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     app_name: str = "Spendly API"
     environment: str = "development"
     frontend_url: str = "http://localhost:3000"
+    messenger_verify_token: str = "spendly-dev-verify-token"
+    messenger_reply_mode: str = "stub"
+    messenger_page_access_token: str | None = None
 
     database_host: str = "localhost"
     database_port: int = 5432
