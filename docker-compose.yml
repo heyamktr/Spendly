@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: spendly-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-spendly}
+      POSTGRES_USER: ${DATABASE_USER:-spendly}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-spendly}
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - spendly_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DATABASE_USER:-spendly} -d ${DATABASE_NAME:-spendly}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  spendly_postgres_data:
