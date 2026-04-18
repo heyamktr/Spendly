@@ -305,7 +305,9 @@ def _send_confirmation_reply(
     parse_result: ParsedExpenseResult,
 ) -> None:
     amount_text = format(parse_result.amount, ".2f")
-    message = f"Logged ${amount_text} to {parse_result.category}."
+    message = f"Logged ${amount_text} for {parse_result.category}"
+    if parse_result.note:
+        message = f"{message}: {parse_result.note}"
     _safe_send_reply(messenger, recipient_psid=recipient_psid, text=message)
 
 
@@ -315,13 +317,15 @@ def _send_parse_failure_reply(
     recipient_psid: str,
     parse_result: ParsedExpenseResult,
 ) -> None:
-    reason_text = "I couldn't find a positive amount in that message."
-    if parse_result.reason == ParseFailureReason.empty_text:
-        reason_text = "I couldn't read any message text."
-
     message = (
-        f"{reason_text} Try messages like 'coffee 5' or 'uber 12 to campus'."
+        "I couldn't understand that expense. "
+        'Try something like "coffee 5" or "uber 12 to campus".'
     )
+    if parse_result.reason == ParseFailureReason.empty_text:
+        message = (
+            "I couldn't read that expense. "
+            'Try something like "coffee 5" or "uber 12 to campus".'
+        )
     _safe_send_reply(messenger, recipient_psid=recipient_psid, text=message)
 
 
@@ -332,7 +336,14 @@ def _safe_send_reply(
     text: str,
 ) -> None:
     try:
-        messenger.send_text_reply(recipient_psid=recipient_psid, text=text)
+        result = messenger.send_text_message(recipient_psid=recipient_psid, text=text)
+        if not result.accepted:
+            logger.warning(
+                "Messenger reply not accepted for %s via %s: %s",
+                recipient_psid,
+                result.provider,
+                result.detail or "unknown error",
+            )
     except Exception:
         logger.exception("Failed to send Messenger reply to %s", recipient_psid)
 
