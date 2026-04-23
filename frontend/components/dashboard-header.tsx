@@ -2,17 +2,17 @@
 
 import { useEffect, useRef } from "react";
 
-import type { UserListItem } from "@/lib/api";
 import type { ThemeMode } from "@/lib/dashboard";
 import { BellIcon, MoonIcon, SearchIcon, SidebarToggleIcon, SunIcon } from "@/components/icons";
 
 type DashboardHeaderProps = {
   apiBaseUrl: string;
+  pageDescription: string;
   pageTitle: string;
   refreshIntervalSeconds: number;
   searchQuery: string;
+  searchPlaceholder?: string;
   onSearchQueryChange: (value: string) => void;
-  selectedUser: UserListItem | null;
   theme: ThemeMode;
   onToggleTheme: () => void;
   onToggleSidebar: () => void;
@@ -20,11 +20,12 @@ type DashboardHeaderProps = {
 
 export function DashboardHeader({
   apiBaseUrl,
+  pageDescription,
   pageTitle,
   refreshIntervalSeconds,
   searchQuery,
+  searchPlaceholder = "Search merchants, notes, categories",
   onSearchQueryChange,
-  selectedUser,
   theme,
   onToggleTheme,
   onToggleSidebar,
@@ -70,9 +71,7 @@ export function DashboardHeader({
                 {pageTitle}
               </h1>
               <p className="mt-1 truncate text-sm text-[var(--text-tertiary)]">
-                {selectedUser
-                  ? `Tracking live Messenger activity for ${selectedUser.display_name?.trim() || selectedUser.messenger_psid}.`
-                  : "Choose a Messenger user to drill into live expense activity."}
+                {pageDescription}
               </p>
             </div>
           </div>
@@ -96,7 +95,7 @@ export function DashboardHeader({
               ref={searchInputRef}
               value={searchQuery}
               onChange={(event) => onSearchQueryChange(event.target.value)}
-              placeholder="Search merchants, notes, categories"
+              placeholder={searchPlaceholder}
               className="h-14 w-full rounded-[22px] border border-[var(--border-subtle)] bg-[var(--surface-card)] pl-12 pr-24 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
