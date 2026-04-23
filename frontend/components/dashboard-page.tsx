@@ -4,6 +4,7 @@ import { startTransition, useDeferredValue, useEffect, useState } from "react";
 
 import { CategoryChart } from "@/components/category-chart";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { EditExpenseModal } from "@/components/edit-expense-modal";
 import { InsightsPanel } from "@/components/insights-panel";
 import { LogExpenseModal } from "@/components/log-expense-modal";
 import { RecentTransactions } from "@/components/recent-transactions";
@@ -12,11 +13,13 @@ import { SummaryCards } from "@/components/summary-cards";
 import { UserSelector } from "@/components/user-selector";
 import {
   createExpense,
+  deleteExpense,
   fetchAnalyticsByCategory,
   fetchAnalyticsSummary,
   fetchExpenses,
   fetchUsers,
   getErrorMessage,
+  updateExpense,
   type AnalyticsByCategoryResponse,
   type AnalyticsPeriod,
   type AnalyticsSummaryResponse,
@@ -67,6 +70,8 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ExpenseResponse | null>(null);
+  const [busyExpenseId, setBusyExpenseId] = useState<number | null>(null);
   const [manualRefreshVersion, setManualRefreshVersion] = useState(0);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -326,6 +331,46 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     setManualRefreshVersion((current) => current + 1);
   }
 
+  async function handleUpdateExpense(
+    expenseId: number,
+    payload: {
+      amount?: string | number;
+      currency?: string;
+      category?: string;
+      note?: string | null;
+      occurred_at?: string;
+    },
+  ) {
+    setBusyExpenseId(expenseId);
+
+    try {
+      await updateExpense(expenseId, payload);
+      setSuccessToast("Expense updated.");
+      setManualRefreshVersion((current) => current + 1);
+    } finally {
+      setBusyExpenseId(null);
+    }
+  }
+
+  async function handleDeleteExpense(expense: ExpenseResponse) {
+    const confirmed = window.confirm(
+      `Delete "${expense.note?.trim() || expense.source_text}"? This cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyExpenseId(expense.id);
+
+    try {
+      await deleteExpense(expense.id);
+      setSuccessToast("Expense deleted.");
+      setManualRefreshVersion((current) => current + 1);
+    } finally {
+      setBusyExpenseId(null);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-300">
       <div className="grain-layer pointer-events-none fixed inset-0 z-0" />
@@ -450,6 +495,11 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
                   period={activePeriod}
                   query={searchQuery}
                   onQueryChange={setSearchQuery}
+                  busyExpenseId={busyExpenseId}
+                  onEditExpense={setEditingExpense}
+                  onDeleteExpense={(expense) => {
+                    void handleDeleteExpense(expense);
+                  }}
                 />
               </div>
             </div>
@@ -481,6 +531,21 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         }
         onClose={() => setIsLogModalOpen(false)}
         onSubmit={handleLogExpense}
+      />
+
+      <EditExpenseModal
+        expense={editingExpense}
+        isOpen={editingExpense !== null}
+        onClose={() => {
+          if (busyExpenseId === editingExpense?.id) {
+            return;
+          }
+          setEditingExpense(null);
+        }}
+        onSubmit={async (expenseId, payload) => {
+          await handleUpdateExpense(expenseId, payload);
+          setEditingExpense(null);
+        }}
       />
     </div>
   );

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.schemas.expense import ExpenseCreate, ExpenseResponse
+from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from app.services import expense_service, user_service
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
@@ -34,3 +34,28 @@ def create_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
 
     return expense_service.create_expense(db, user=user, expense_in=expense_in)
+
+
+@router.patch("/{expense_id}", response_model=ExpenseResponse)
+def update_expense(
+    expense_id: int,
+    expense_in: ExpenseUpdate,
+    db: Session = Depends(get_db),
+) -> ExpenseResponse:
+    expense = expense_service.get_expense_by_id(db, expense_id)
+    if expense is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="expense not found")
+
+    return expense_service.update_expense(db, expense=expense, expense_in=expense_in)
+
+
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    expense = expense_service.get_expense_by_id(db, expense_id)
+    if expense is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="expense not found")
+
+    expense_service.delete_expense(db, expense=expense)

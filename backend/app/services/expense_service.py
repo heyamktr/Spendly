@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.expense import Expense
 from app.models.user import User
-from app.schemas.expense import ExpenseCreate
+from app.schemas.expense import ExpenseCreate, ExpenseUpdate
 
 
 def list_expenses(db: Session, *, user_id: int, limit: int, offset: int) -> list[Expense]:
@@ -20,6 +20,10 @@ def list_expenses(db: Session, *, user_id: int, limit: int, offset: int) -> list
         .offset(offset)
     )
     return list(db.scalars(statement))
+
+
+def get_expense_by_id(db: Session, expense_id: int) -> Expense | None:
+    return db.get(Expense, expense_id)
 
 
 def create_expense(db: Session, *, user: User, expense_in: ExpenseCreate) -> Expense:
@@ -69,6 +73,33 @@ def create_expense_record(
     else:
         db.flush()
     return expense
+
+
+def update_expense(
+    db: Session,
+    *,
+    expense: Expense,
+    expense_in: ExpenseUpdate,
+) -> Expense:
+    if "amount" in expense_in.model_fields_set:
+        expense.amount = expense_in.amount
+    if "currency" in expense_in.model_fields_set:
+        expense.currency = expense_in.currency
+    if "category" in expense_in.model_fields_set:
+        expense.category = expense_in.category
+    if "note" in expense_in.model_fields_set:
+        expense.note = expense_in.note
+    if "occurred_at" in expense_in.model_fields_set:
+        expense.occurred_at = _normalize_occurred_at(expense_in.occurred_at)
+
+    db.commit()
+    db.refresh(expense)
+    return expense
+
+
+def delete_expense(db: Session, *, expense: Expense) -> None:
+    db.delete(expense)
+    db.commit()
 
 
 def _normalize_occurred_at(value: datetime | None) -> datetime:

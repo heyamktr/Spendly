@@ -31,6 +31,14 @@ export type ExpenseCreateInput = {
   occurred_at?: string | null;
 };
 
+export type ExpenseUpdateInput = {
+  amount?: MoneyValue;
+  currency?: string;
+  category?: string;
+  note?: string | null;
+  occurred_at?: string;
+};
+
 export type AnalyticsSummaryResponse = {
   user_id: number;
   currency: string;
@@ -137,6 +145,25 @@ export async function createExpense(
   });
 }
 
+export async function updateExpense(
+  expenseId: number,
+  expense: ExpenseUpdateInput,
+): Promise<ExpenseResponse> {
+  return fetchJson<ExpenseResponse>(`/api/expenses/${expenseId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(expense),
+  });
+}
+
+export async function deleteExpense(expenseId: number): Promise<void> {
+  await fetchJson<null>(`/api/expenses/${expenseId}`, {
+    method: "DELETE",
+  });
+}
+
 export function toNumber(value: MoneyValue): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -199,6 +226,10 @@ async function fetchJson<T>(
 
   if (!response.ok) {
     throw new ApiError(await readErrorMessage(response), response.status);
+  }
+
+  if (response.status === 204) {
+    return null as T;
   }
 
   return (await response.json()) as T;
