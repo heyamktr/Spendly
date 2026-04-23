@@ -21,6 +21,16 @@ export type ExpenseResponse = {
   created_at: string;
 };
 
+export type ExpenseCreateInput = {
+  user_id: number;
+  amount: MoneyValue;
+  currency?: string;
+  category: string;
+  note?: string | null;
+  source_text?: string | null;
+  occurred_at?: string | null;
+};
+
 export type AnalyticsSummaryResponse = {
   user_id: number;
   currency: string;
@@ -101,6 +111,30 @@ export async function fetchRecentTransactions(
     `/api/analytics/recent${buildQuery({ user_id: userId, limit })}`,
     { signal },
   );
+}
+
+export async function fetchExpenses(
+  userId: number,
+  limit = 40,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<ExpenseResponse[]> {
+  return fetchJson<ExpenseResponse[]>(
+    `/api/expenses${buildQuery({ user_id: userId, limit, offset })}`,
+    { signal },
+  );
+}
+
+export async function createExpense(
+  expense: ExpenseCreateInput,
+): Promise<ExpenseResponse> {
+  return fetchJson<ExpenseResponse>("/api/expenses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(expense),
+  });
 }
 
 export function toNumber(value: MoneyValue): number {
