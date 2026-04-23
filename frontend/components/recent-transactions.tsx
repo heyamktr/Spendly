@@ -19,6 +19,9 @@ type RecentTransactionsProps = {
   period: AnalyticsPeriod;
   query: string;
   onQueryChange: (value: string) => void;
+  busyExpenseId: number | null;
+  onEditExpense: (expense: ExpenseResponse) => void;
+  onDeleteExpense: (expense: ExpenseResponse) => void;
 };
 
 export function RecentTransactions({
@@ -29,6 +32,9 @@ export function RecentTransactions({
   period,
   query,
   onQueryChange,
+  busyExpenseId,
+  onEditExpense,
+  onDeleteExpense,
 }: RecentTransactionsProps) {
   const itemCount = groups.reduce((total, group) => total + group.items.length, 0);
 
@@ -101,7 +107,13 @@ export function RecentTransactions({
 
                   <div className="space-y-3">
                     {group.items.map((expense) => (
-                      <TransactionRow key={expense.id} expense={expense} />
+                      <TransactionRow
+                        key={expense.id}
+                        expense={expense}
+                        isBusy={busyExpenseId === expense.id}
+                        onEditExpense={onEditExpense}
+                        onDeleteExpense={onDeleteExpense}
+                      />
                     ))}
                   </div>
                 </section>
@@ -114,7 +126,17 @@ export function RecentTransactions({
   );
 }
 
-function TransactionRow({ expense }: { expense: ExpenseResponse }) {
+function TransactionRow({
+  expense,
+  isBusy,
+  onEditExpense,
+  onDeleteExpense,
+}: {
+  expense: ExpenseResponse;
+  isBusy: boolean;
+  onEditExpense: (expense: ExpenseResponse) => void;
+  onDeleteExpense: (expense: ExpenseResponse) => void;
+}) {
   return (
     <article className="group relative overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 py-4 shadow-[var(--shadow-soft)] transition hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-strong)]">
       <div className="flex items-start gap-4">
@@ -151,9 +173,19 @@ function TransactionRow({ expense }: { expense: ExpenseResponse }) {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex translate-x-6 items-center gap-2 pr-4 opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:opacity-100">
-        <ActionHint icon={<EditIcon className="h-4 w-4" />} label="Edit" />
-        <ActionHint icon={<DeleteIcon className="h-4 w-4" />} label="Delete" />
+      <div className="absolute inset-y-0 right-0 flex translate-x-6 items-center gap-2 pr-4 opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:opacity-100">
+        <ActionHint
+          icon={<EditIcon className="h-4 w-4" />}
+          label={isBusy ? "Working..." : "Edit"}
+          onClick={() => onEditExpense(expense)}
+          disabled={isBusy}
+        />
+        <ActionHint
+          icon={<DeleteIcon className="h-4 w-4" />}
+          label={isBusy ? "Working..." : "Delete"}
+          onClick={() => onDeleteExpense(expense)}
+          disabled={isBusy}
+        />
       </div>
     </article>
   );
@@ -162,15 +194,24 @@ function TransactionRow({ expense }: { expense: ExpenseResponse }) {
 function ActionHint({
   icon,
   label,
+  onClick,
+  disabled,
 }: {
   icon: ReactNode;
   label: string;
+  onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface-card)_88%,transparent)] px-3 py-1 text-xs font-medium text-[var(--text-tertiary)] backdrop-blur">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-1 rounded-full border border-[var(--border-subtle)] bg-[color-mix(in_srgb,var(--surface-card)_88%,transparent)] px-3 py-1 text-xs font-medium text-[var(--text-tertiary)] backdrop-blur transition hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-60"
+    >
       {icon}
       {label}
-    </span>
+    </button>
   );
 }
 
