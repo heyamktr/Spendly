@@ -26,6 +26,12 @@ type DashboardPageProps = {
 
 type LoadStatus = "idle" | "loading" | "success" | "error";
 
+const DASHBOARD_REFRESH_INTERVAL_MS = 3_000;
+
+type RefreshOptions = {
+  showLoading?: boolean;
+};
+
 export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [usersStatus, setUsersStatus] = useState<LoadStatus>("loading");
@@ -46,9 +52,17 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadUsers() {
-      setUsersStatus("loading");
+    async function loadUsers({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setUsersStatus("loading");
+      }
       setUsersError(null);
 
       try {
@@ -72,16 +86,26 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
           return;
         }
 
-        setUsers([]);
-        setSelectedUserId(null);
+        if (showLoading) {
+          setUsers([]);
+          setSelectedUserId(null);
+        }
         setUsersStatus("error");
         setUsersError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadUsers();
+    void loadUsers({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadUsers();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
@@ -95,12 +119,20 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
     const currentUserId = selectedUserId;
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadDetails() {
-      setDetailsStatus("loading");
+    async function loadDetails({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setDetailsStatus("loading");
+        setSummary(null);
+        setRecent(null);
+      }
       setDetailsError(null);
-      setSummary(null);
-      setRecent(null);
 
       try {
         const [nextSummary, nextRecent] = await Promise.all([
@@ -118,12 +150,20 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         setDetailsStatus("error");
         setDetailsError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadDetails();
+    void loadDetails({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadDetails();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
   }, [selectedUserId]);
 
   useEffect(() => {
@@ -136,11 +176,19 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
     const currentUserId = selectedUserId;
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadCategoryData() {
-      setCategoryStatus("loading");
+    async function loadCategoryData({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setCategoryStatus("loading");
+        setCategoryData(null);
+      }
       setCategoryError(null);
-      setCategoryData(null);
 
       try {
         const nextCategoryData = await fetchAnalyticsByCategory(
@@ -157,12 +205,20 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         setCategoryStatus("error");
         setCategoryError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadCategoryData();
+    void loadCategoryData({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadCategoryData();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
   }, [selectedUserId, categoryPeriod]);
 
   const hasUsers = users.length > 0;
@@ -170,7 +226,10 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   return (
     <main className="min-h-screen px-4 py-8 text-slate-50 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <DashboardHeader apiBaseUrl={apiBaseUrl} />
+        <DashboardHeader
+          apiBaseUrl={apiBaseUrl}
+          refreshIntervalSeconds={DASHBOARD_REFRESH_INTERVAL_MS / 1_000}
+        />
 
         <section className="rounded-3xl border border-slate-800/80 bg-slate-900/75 p-5 shadow-2xl shadow-slate-950/30 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

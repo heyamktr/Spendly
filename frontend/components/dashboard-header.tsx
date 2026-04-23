@@ -1,8 +1,12 @@
 type DashboardHeaderProps = {
   apiBaseUrl: string;
+  refreshIntervalSeconds: number;
 };
 
-export function DashboardHeader({ apiBaseUrl }: DashboardHeaderProps) {
+export function DashboardHeader({
+  apiBaseUrl,
+  refreshIntervalSeconds,
+}: DashboardHeaderProps) {
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/80 shadow-2xl shadow-slate-950/30">
       <div className="grid gap-6 px-5 py-6 sm:px-6 sm:py-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
@@ -24,6 +28,9 @@ export function DashboardHeader({ apiBaseUrl }: DashboardHeaderProps) {
             Backend URL
           </p>
           <code className="mt-2 block text-sm text-cyan-200">{apiBaseUrl}</code>
+          <p className="mt-2 text-xs leading-5 text-slate-400">
+            Auto-refreshes every {refreshIntervalSeconds} seconds.
+          </p>
         </div>
       </div>
     </section>
