@@ -9,42 +9,48 @@ import {
   SidebarToggleIcon,
 } from "@/components/icons";
 
+export type AppSection = "dashboard" | "analytics" | "categories" | "settings";
+
 type SpendlySidebarProps = {
+  activeSection: AppSection;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  onSelectSection: (section: AppSection) => void;
   selectedUser: UserListItem | null;
 };
 
-const NAV_ITEMS = [
+const NAV_ITEMS: ReadonlyArray<{
+  id: AppSection;
+  label: string;
+  icon: typeof DashboardIcon;
+}> = [
   {
     id: "dashboard",
     label: "Dashboard",
-    active: true,
     icon: DashboardIcon,
   },
   {
     id: "analytics",
     label: "Analytics",
-    active: false,
     icon: AnalyticsIcon,
   },
   {
     id: "categories",
     label: "Categories",
-    active: false,
     icon: CategoriesIcon,
   },
   {
     id: "settings",
     label: "Settings",
-    active: false,
     icon: SettingsIcon,
   },
-] as const;
+];
 
 export function SpendlySidebar({
+  activeSection,
   collapsed,
   onToggleCollapsed,
+  onSelectSection,
   selectedUser,
 }: SpendlySidebarProps) {
   return (
@@ -83,20 +89,23 @@ export function SpendlySidebar({
       <nav className="mt-10 space-y-2">
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
+          const active = item.id === activeSection;
 
           return (
             <button
               key={item.id}
               type="button"
+              onClick={() => onSelectSection(item.id)}
+              aria-current={active ? "page" : undefined}
               className={`group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left transition ${
-                item.active
+                active
                   ? "bg-[var(--sidebar-active-bg)] text-[var(--text-primary)] shadow-[var(--shadow-soft)]"
                   : "text-[var(--text-secondary)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--text-primary)]"
               }`}
             >
               <span
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
-                  item.active
+                  active
                     ? "bg-[var(--accent-soft)] text-[var(--accent-primary)]"
                     : "bg-transparent"
                 }`}

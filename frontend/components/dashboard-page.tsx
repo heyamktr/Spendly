@@ -1,6 +1,12 @@
 "use client";
 
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { CategoryChart } from "@/components/category-chart";
 import { DashboardHeader } from "@/components/dashboard-header";
@@ -8,9 +14,14 @@ import { EditExpenseModal } from "@/components/edit-expense-modal";
 import { InsightsPanel } from "@/components/insights-panel";
 import { LogExpenseModal } from "@/components/log-expense-modal";
 import { RecentTransactions } from "@/components/recent-transactions";
-import { SpendlySidebar } from "@/components/spendly-sidebar";
+import { SpendlySidebar, type AppSection } from "@/components/spendly-sidebar";
 import { SummaryCards } from "@/components/summary-cards";
 import { UserSelector } from "@/components/user-selector";
+import {
+  AnalyticsWorkspace,
+  CategoriesWorkspace,
+  SettingsWorkspace,
+} from "@/components/workspace-sections";
 import {
   createExpense,
   deleteExpense,
@@ -48,6 +59,20 @@ type RefreshOptions = {
   showLoading?: boolean;
 };
 
+const SECTION_TITLES: Record<AppSection, string> = {
+  dashboard: "Dashboard",
+  analytics: "Analytics",
+  categories: "Categories",
+  settings: "Settings",
+};
+
+const SECTION_SEARCH_PLACEHOLDERS: Record<AppSection, string> = {
+  dashboard: "Search merchants, notes, categories",
+  analytics: "Search merchants and spend signals",
+  categories: "Search categories and recent activity",
+  settings: "Search settings and workspace actions",
+};
+
 export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [usersStatus, setUsersStatus] = useState<LoadStatus>("loading");
@@ -66,12 +91,14 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
 
+  const [activeSection, setActiveSection] = useState<AppSection>("dashboard");
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseResponse | null>(null);
   const [busyExpenseId, setBusyExpenseId] = useState<number | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [manualRefreshVersion, setManualRefreshVersion] = useState(0);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
@@ -128,6 +155,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         const nextUsers = await fetchUsers(controller.signal);
         setUsers(nextUsers);
         setUsersStatus("success");
+        setLastSyncedAt(new Date().toISOString());
         setSelectedUserId((currentUserId) => {
           if (nextUsers.length === 0) {
             return null;
@@ -202,6 +230,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         setSummary(nextSummary);
         setExpenses(nextExpenses);
         setDetailsStatus("success");
+        setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         if (controller.signal.aborted) {
           return;
@@ -257,6 +286,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         );
         setCategoryData(nextCategoryData);
         setCategoryStatus("success");
+        setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         if (controller.signal.aborted) {
           return;
@@ -297,6 +327,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const hasUsers = users.length > 0;
   const stats = buildDashboardStats(summary, expenses, now);
   const insights = buildInsights(summary, categoryData, expenses, activePeriod, now);
+  const currentPeriodExpenses = filterExpensesForPeriod(expenses, activePeriod, "", now);
   const filteredExpenses = filterExpensesForPeriod(
     expenses,
     activePeriod,
@@ -306,6 +337,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const groupedTransactions = groupTransactionsByDate(filteredExpenses);
   const currency =
     summary?.currency ?? categoryData?.currency ?? expenses[0]?.currency ?? "USD";
+  const pageTitle = SECTION_TITLES[activeSection];
+  const pageDescription = getPageDescription(activeSection, selectedUser);
+  const searchPlaceholder = SECTION_SEARCH_PLACEHOLDERS[activeSection];
 
   async function handleLogExpense(message: string) {
     if (selectedUserId === null) {
@@ -371,13 +405,174 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     }
   }
 
+  function handleSelectPeriod(nextPeriod: AnalyticsPeriod) {
+    startTransition(() => {
+      setActivePeriod(nextPeriod);
+    });
+  }
+
+  function handleSelectSection(nextSection: AppSection) {
+    startTransition(() => {
+      setActiveSection(nextSection);
+    });
+  }
+
+  function handleRefreshNow() {
+    setManualRefreshVersion((current) => current + 1);
+  }
+
+  function handleResetHiddenCategories() {
+    setHiddenCategories([]);
+  }
+
+  let sectionContent: ReactNode;
+
+  if (activeSection === "dashboard") {
+    sectionContent = (
+      <>
+        <SummaryCards
+          stats={stats}
+          activePeriod={activePeriod}
+          currency={currency}
+          isLoading={detailsStatus === "loading"}
+          error={detailsStatus === "error" ? detailsError : null}
+          isDisabled={!hasUsers}
+          onSelectPeriod={handleSelectPeriod}
+        />
+
+        <InsightsPanel
+          insights={insights}
+          isLoading={
+            detailsStatus === "loading" ||
+            (categoryStatus === "loading" && activePeriod === categoryData?.period)
+          }
+          error={
+            detailsStatus === "error"
+              ? detailsError
+              : categoryStatus === "error"
+                ? categoryError
+                : null
+          }
+          isDisabled={!hasUsers}
+        />
+
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <CategoryChart
+            categoryData={categoryData}
+            period={activePeriod}
+            onPeriodChange={handleSelectPeriod}
+            isLoading={categoryStatus === "loading"}
+            error={categoryStatus === "error" ? categoryError : null}
+            isDisabled={!hasUsers}
+            hiddenCategories={hiddenCategories}
+            onToggleCategory={(category) => {
+              setHiddenCategories((current) =>
+                current.includes(category)
+                  ? current.filter((item) => item !== category)
+                  : [...current, category],
+              );
+            }}
+          />
+
+          <RecentTransactions
+            groups={groupedTransactions}
+            isLoading={detailsStatus === "loading"}
+            error={detailsStatus === "error" ? detailsError : null}
+            isDisabled={!hasUsers}
+            period={activePeriod}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            busyExpenseId={busyExpenseId}
+            onEditExpense={setEditingExpense}
+            onDeleteExpense={(expense) => {
+              void handleDeleteExpense(expense);
+            }}
+          />
+        </div>
+      </>
+    );
+  } else if (activeSection === "analytics") {
+    sectionContent = (
+      <AnalyticsWorkspace
+        activePeriod={activePeriod}
+        categoryData={categoryData}
+        categoryError={categoryStatus === "error" ? categoryError : null}
+        categoryStatus={categoryStatus}
+        currency={currency}
+        currentPeriodExpenses={currentPeriodExpenses}
+        detailsError={detailsStatus === "error" ? detailsError : null}
+        detailsStatus={detailsStatus}
+        hiddenCategories={hiddenCategories}
+        insights={insights}
+        isDisabled={!hasUsers}
+        onSelectPeriod={handleSelectPeriod}
+        onToggleCategory={(category) => {
+          setHiddenCategories((current) =>
+            current.includes(category)
+              ? current.filter((item) => item !== category)
+              : [...current, category],
+          );
+        }}
+        searchQuery={searchQuery}
+        stats={stats}
+      />
+    );
+  } else if (activeSection === "categories") {
+    sectionContent = (
+      <CategoriesWorkspace
+        activePeriod={activePeriod}
+        categoryData={categoryData}
+        categoryError={categoryStatus === "error" ? categoryError : null}
+        categoryStatus={categoryStatus}
+        currentPeriodExpenses={currentPeriodExpenses}
+        hiddenCategories={hiddenCategories}
+        isDisabled={!hasUsers}
+        onResetHiddenCategories={handleResetHiddenCategories}
+        onSelectPeriod={handleSelectPeriod}
+        onToggleCategory={(category) => {
+          setHiddenCategories((current) =>
+            current.includes(category)
+              ? current.filter((item) => item !== category)
+              : [...current, category],
+          );
+        }}
+        searchQuery={searchQuery}
+      />
+    );
+  } else {
+    sectionContent = (
+      <SettingsWorkspace
+        activePeriod={activePeriod}
+        apiBaseUrl={apiBaseUrl}
+        currency={currency}
+        expenseCount={expenses.length}
+        hiddenCategoriesCount={hiddenCategories.length}
+        lastSyncedAt={lastSyncedAt}
+        onClearSearch={() => setSearchQuery("")}
+        onOpenLogModal={() => setIsLogModalOpen(true)}
+        onRefreshNow={handleRefreshNow}
+        onResetHiddenCategories={handleResetHiddenCategories}
+        onSelectTheme={setTheme}
+        onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
+        refreshIntervalSeconds={DASHBOARD_REFRESH_INTERVAL_MS / 1_000}
+        searchQuery={searchQuery}
+        selectedUser={selectedUser}
+        sidebarCollapsed={sidebarCollapsed}
+        theme={theme}
+        usersCount={users.length}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-300">
       <div className="grain-layer pointer-events-none fixed inset-0 z-0" />
 
       <div className="relative z-10 flex min-h-screen">
         <SpendlySidebar
+          activeSection={activeSection}
           collapsed={sidebarCollapsed}
+          onSelectSection={handleSelectSection}
           onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
           selectedUser={selectedUser}
         />
@@ -385,11 +580,12 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <DashboardHeader
             apiBaseUrl={apiBaseUrl}
-            pageTitle="Dashboard"
+            pageDescription={pageDescription}
+            pageTitle={pageTitle}
             refreshIntervalSeconds={DASHBOARD_REFRESH_INTERVAL_MS / 1_000}
             searchQuery={searchQuery}
+            searchPlaceholder={searchPlaceholder}
             onSearchQueryChange={setSearchQuery}
-            selectedUser={selectedUser}
             theme={theme}
             onToggleTheme={() =>
               setTheme((currentTheme) =>
@@ -435,73 +631,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
                 </section>
               ) : null}
 
-              <SummaryCards
-                stats={stats}
-                activePeriod={activePeriod}
-                currency={currency}
-                isLoading={detailsStatus === "loading"}
-                error={detailsStatus === "error" ? detailsError : null}
-                isDisabled={!hasUsers}
-                onSelectPeriod={(nextPeriod) => {
-                  startTransition(() => {
-                    setActivePeriod(nextPeriod);
-                  });
-                }}
-              />
-
-              <InsightsPanel
-                insights={insights}
-                isLoading={
-                  detailsStatus === "loading" ||
-                  (categoryStatus === "loading" && activePeriod === categoryData?.period)
-                }
-                error={
-                  detailsStatus === "error"
-                    ? detailsError
-                    : categoryStatus === "error"
-                      ? categoryError
-                      : null
-                }
-                isDisabled={!hasUsers}
-              />
-
-              <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <CategoryChart
-                  categoryData={categoryData}
-                  period={activePeriod}
-                  onPeriodChange={(nextPeriod) => {
-                    startTransition(() => {
-                      setActivePeriod(nextPeriod);
-                    });
-                  }}
-                  isLoading={categoryStatus === "loading"}
-                  error={categoryStatus === "error" ? categoryError : null}
-                  isDisabled={!hasUsers}
-                  hiddenCategories={hiddenCategories}
-                  onToggleCategory={(category) => {
-                    setHiddenCategories((current) =>
-                      current.includes(category)
-                        ? current.filter((item) => item !== category)
-                        : [...current, category],
-                    );
-                  }}
-                />
-
-                <RecentTransactions
-                  groups={groupedTransactions}
-                  isLoading={detailsStatus === "loading"}
-                  error={detailsStatus === "error" ? detailsError : null}
-                  isDisabled={!hasUsers}
-                  period={activePeriod}
-                  query={searchQuery}
-                  onQueryChange={setSearchQuery}
-                  busyExpenseId={busyExpenseId}
-                  onEditExpense={setEditingExpense}
-                  onDeleteExpense={(expense) => {
-                    void handleDeleteExpense(expense);
-                  }}
-                />
-              </div>
+              {sectionContent}
             </div>
           </main>
         </div>
@@ -549,4 +679,34 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       />
     </div>
   );
+}
+
+function getPageDescription(
+  section: AppSection,
+  selectedUser: UserListItem | null,
+): string {
+  const selectedUserLabel =
+    selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || null;
+
+  if (section === "dashboard") {
+    return selectedUserLabel
+      ? `Tracking live Messenger activity for ${selectedUserLabel}.`
+      : "Choose a Messenger user to drill into live expense activity.";
+  }
+
+  if (section === "analytics") {
+    return selectedUserLabel
+      ? `Comparing spend velocity, category mix, and merchant concentration for ${selectedUserLabel}.`
+      : "Choose a Messenger user to unlock spend analysis and period signals.";
+  }
+
+  if (section === "categories") {
+    return selectedUserLabel
+      ? `Inspecting how ${selectedUserLabel} allocates spend across categories and filters.`
+      : "Choose a Messenger user to inspect category allocation and filter behavior.";
+  }
+
+  return selectedUserLabel
+    ? `Managing workspace preferences and live sync details for ${selectedUserLabel}.`
+    : "Tune workspace preferences, sync behavior, and layout controls.";
 }
