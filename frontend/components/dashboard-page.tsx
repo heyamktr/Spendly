@@ -1,24 +1,37 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useState } from "react";
 
 import { CategoryChart } from "@/components/category-chart";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { InsightsPanel } from "@/components/insights-panel";
+import { LogExpenseModal } from "@/components/log-expense-modal";
 import { RecentTransactions } from "@/components/recent-transactions";
+import { SpendlySidebar } from "@/components/spendly-sidebar";
 import { SummaryCards } from "@/components/summary-cards";
 import { UserSelector } from "@/components/user-selector";
 import {
-  type AnalyticsByCategoryResponse,
-  type AnalyticsPeriod,
-  type AnalyticsRecentResponse,
-  type AnalyticsSummaryResponse,
-  type UserListItem,
+  createExpense,
   fetchAnalyticsByCategory,
   fetchAnalyticsSummary,
-  fetchRecentTransactions,
+  fetchExpenses,
   fetchUsers,
   getErrorMessage,
+  type AnalyticsByCategoryResponse,
+  type AnalyticsPeriod,
+  type AnalyticsSummaryResponse,
+  type ExpenseResponse,
+  type UserListItem,
 } from "@/lib/api";
+import {
+  buildDashboardStats,
+  buildInsights,
+  filterExpensesForPeriod,
+  groupTransactionsByDate,
+  parseExpenseDraft,
+  type ThemeMode,
+} from "@/lib/dashboard";
+import { PlusIcon } from "@/components/icons";
 
 type DashboardPageProps = {
   apiBaseUrl: string;
@@ -26,16 +39,21 @@ type DashboardPageProps = {
 
 type LoadStatus = "idle" | "loading" | "success" | "error";
 
+const DASHBOARD_REFRESH_INTERVAL_MS = 3_000;
+
+type RefreshOptions = {
+  showLoading?: boolean;
+};
+
 export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [usersStatus, setUsersStatus] = useState<LoadStatus>("loading");
   const [usersError, setUsersError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [categoryPeriod, setCategoryPeriod] =
-    useState<AnalyticsPeriod>("month");
 
+  const [activePeriod, setActivePeriod] = useState<AnalyticsPeriod>("month");
   const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(null);
-  const [recent, setRecent] = useState<AnalyticsRecentResponse | null>(null);
+  const [expenses, setExpenses] = useState<ExpenseResponse[]>([]);
   const [detailsStatus, setDetailsStatus] = useState<LoadStatus>("idle");
   const [detailsError, setDetailsError] = useState<string | null>(null);
 
@@ -43,12 +61,62 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     useState<AnalyticsByCategoryResponse | null>(null);
   const [categoryStatus, setCategoryStatus] = useState<LoadStatus>("idle");
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
+
+  const [theme, setTheme] = useState<ThemeMode>("dark");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [manualRefreshVersion, setManualRefreshVersion] = useState(0);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const now = new Date();
+
+  useEffect(() => {
+    const storedTheme =
+      typeof window !== "undefined" ? window.localStorage.getItem("spendly-theme") : null;
+
+    if (storedTheme === "light" || storedTheme === "dark") {
+      setTheme(storedTheme);
+      return;
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-color-scheme: light)").matches
+    ) {
+      setTheme("light");
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("spendly-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (!successToast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setSuccessToast(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [successToast]);
 
   useEffect(() => {
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadUsers() {
-      setUsersStatus("loading");
+    async function loadUsers({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setUsersStatus("loading");
+      }
       setUsersError(null);
 
       try {
@@ -72,22 +140,32 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
           return;
         }
 
-        setUsers([]);
-        setSelectedUserId(null);
+        if (showLoading) {
+          setUsers([]);
+          setSelectedUserId(null);
+        }
         setUsersStatus("error");
         setUsersError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadUsers();
+    void loadUsers({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadUsers();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
     if (selectedUserId === null) {
       setSummary(null);
-      setRecent(null);
+      setExpenses([]);
       setDetailsStatus("idle");
       setDetailsError(null);
       return;
@@ -95,21 +173,29 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
     const currentUserId = selectedUserId;
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadDetails() {
-      setDetailsStatus("loading");
+    async function loadDetails({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setDetailsStatus("loading");
+        setSummary(null);
+        setExpenses([]);
+      }
       setDetailsError(null);
-      setSummary(null);
-      setRecent(null);
 
       try {
-        const [nextSummary, nextRecent] = await Promise.all([
+        const [nextSummary, nextExpenses] = await Promise.all([
           fetchAnalyticsSummary(currentUserId, controller.signal),
-          fetchRecentTransactions(currentUserId, 8, controller.signal),
+          fetchExpenses(currentUserId, 100, 0, controller.signal),
         ]);
 
         setSummary(nextSummary);
-        setRecent(nextRecent);
+        setExpenses(nextExpenses);
         setDetailsStatus("success");
       } catch (error) {
         if (controller.signal.aborted) {
@@ -118,13 +204,21 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         setDetailsStatus("error");
         setDetailsError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadDetails();
+    void loadDetails({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadDetails();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
-  }, [selectedUserId]);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [selectedUserId, manualRefreshVersion]);
 
   useEffect(() => {
     if (selectedUserId === null) {
@@ -136,16 +230,24 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
     const currentUserId = selectedUserId;
     const controller = new AbortController();
+    let isRefreshing = false;
 
-    async function loadCategoryData() {
-      setCategoryStatus("loading");
+    async function loadCategoryData({ showLoading = false }: RefreshOptions = {}) {
+      if (isRefreshing) {
+        return;
+      }
+
+      isRefreshing = true;
+      if (showLoading) {
+        setCategoryStatus("loading");
+        setCategoryData(null);
+      }
       setCategoryError(null);
-      setCategoryData(null);
 
       try {
         const nextCategoryData = await fetchAnalyticsByCategory(
           currentUserId,
-          categoryPeriod,
+          activePeriod,
           controller.signal,
         );
         setCategoryData(nextCategoryData);
@@ -157,97 +259,229 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         setCategoryStatus("error");
         setCategoryError(getErrorMessage(error));
+      } finally {
+        isRefreshing = false;
       }
     }
 
-    loadCategoryData();
+    void loadCategoryData({ showLoading: true });
+    const intervalId = window.setInterval(() => {
+      void loadCategoryData();
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
 
-    return () => controller.abort();
-  }, [selectedUserId, categoryPeriod]);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [selectedUserId, activePeriod, manualRefreshVersion]);
 
+  useEffect(() => {
+    if (!categoryData) {
+      return;
+    }
+
+    setHiddenCategories((current) =>
+      current.filter((category) =>
+        categoryData.items.some((item) => item.category === category),
+      ),
+    );
+  }, [categoryData]);
+
+  const selectedUser =
+    users.find((user) => user.id === selectedUserId) ?? null;
   const hasUsers = users.length > 0;
+  const stats = buildDashboardStats(summary, expenses, now);
+  const insights = buildInsights(summary, categoryData, expenses, activePeriod, now);
+  const filteredExpenses = filterExpensesForPeriod(
+    expenses,
+    activePeriod,
+    deferredSearchQuery,
+    now,
+  );
+  const groupedTransactions = groupTransactionsByDate(filteredExpenses);
+  const currency =
+    summary?.currency ?? categoryData?.currency ?? expenses[0]?.currency ?? "USD";
+
+  async function handleLogExpense(message: string) {
+    if (selectedUserId === null) {
+      throw new Error("Select a Messenger user before logging an expense.");
+    }
+
+    const preview = parseExpenseDraft(message);
+    if (!preview.success || preview.amount === null || preview.category === null) {
+      throw new Error(preview.reason ?? "Spendly could not parse that message.");
+    }
+
+    await createExpense({
+      user_id: selectedUserId,
+      amount: preview.amount,
+      currency: "USD",
+      category: preview.category,
+      note: preview.note,
+      source_text: message,
+      occurred_at: new Date().toISOString(),
+    });
+
+    setSuccessToast(`Logged "${message}" for ${selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || "the selected user"}.`);
+    setManualRefreshVersion((current) => current + 1);
+  }
 
   return (
-    <main className="min-h-screen px-4 py-8 text-slate-50 sm:px-6 lg:px-8">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <DashboardHeader apiBaseUrl={apiBaseUrl} />
+    <div className="min-h-screen bg-[var(--app-bg)] text-[var(--text-primary)] transition-colors duration-300">
+      <div className="grain-layer pointer-events-none fixed inset-0 z-0" />
 
-        <section className="rounded-3xl border border-slate-800/80 bg-slate-900/75 p-5 shadow-2xl shadow-slate-950/30 sm:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-medium uppercase tracking-[0.24em] text-cyan-300">
-                Dashboard
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-                Spending overview
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Choose a Messenger user to inspect their recent spending totals,
-                category mix, and latest transactions.
-              </p>
-            </div>
-
-            <UserSelector
-              users={users}
-              selectedUserId={selectedUserId}
-              onChange={(nextUserId) => {
-                startTransition(() => {
-                  setSelectedUserId(nextUserId);
-                });
-              }}
-              isLoading={usersStatus === "loading"}
-              isDisabled={!hasUsers}
-            />
-          </div>
-
-          {usersStatus === "error" ? (
-            <div className="mt-5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-100">
-              <p className="font-medium">Could not load Messenger users.</p>
-              <p className="mt-1 text-rose-100/80">{usersError}</p>
-            </div>
-          ) : null}
-
-          {usersStatus === "success" && !hasUsers ? (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-6 text-sm text-slate-300">
-              <p className="font-medium text-white">No Messenger users yet</p>
-              <p className="mt-2 max-w-2xl leading-6">
-                Spendly has not received any Messenger users yet. Send a test
-                message to your Page, or seed the backend with a user before
-                opening the dashboard again.
-              </p>
-            </div>
-          ) : null}
-        </section>
-
-        <SummaryCards
-          summary={summary}
-          isLoading={detailsStatus === "loading"}
-          error={detailsStatus === "error" ? detailsError : null}
-          isDisabled={!hasUsers}
+      <div className="relative z-10 flex min-h-screen">
+        <SpendlySidebar
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
+          selectedUser={selectedUser}
         />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <CategoryChart
-            categoryData={categoryData}
-            period={categoryPeriod}
-            onPeriodChange={(nextPeriod) => {
-              startTransition(() => {
-                setCategoryPeriod(nextPeriod);
-              });
-            }}
-            isLoading={categoryStatus === "loading"}
-            error={categoryStatus === "error" ? categoryError : null}
-            isDisabled={!hasUsers}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <DashboardHeader
+            apiBaseUrl={apiBaseUrl}
+            pageTitle="Dashboard"
+            refreshIntervalSeconds={DASHBOARD_REFRESH_INTERVAL_MS / 1_000}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            selectedUser={selectedUser}
+            theme={theme}
+            onToggleTheme={() =>
+              setTheme((currentTheme) =>
+                currentTheme === "dark" ? "light" : "dark",
+              )
+            }
+            onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
           />
 
-          <RecentTransactions
-            recent={recent}
-            isLoading={detailsStatus === "loading"}
-            error={detailsStatus === "error" ? detailsError : null}
-            isDisabled={!hasUsers}
-          />
+          <main className="flex-1 px-4 pb-24 pt-6 md:px-8">
+            <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
+              <UserSelector
+                users={users}
+                selectedUserId={selectedUserId}
+                onChange={(nextUserId) => {
+                  startTransition(() => {
+                    setSelectedUserId(nextUserId);
+                  });
+                }}
+                isLoading={usersStatus === "loading"}
+                isDisabled={!hasUsers}
+              />
+
+              {usersStatus === "error" ? (
+                <section className="surface-panel p-5 text-sm text-[var(--danger-text)]">
+                  <p className="font-medium">Could not load Messenger users.</p>
+                  <p className="mt-2 text-[var(--text-tertiary)]">{usersError}</p>
+                </section>
+              ) : null}
+
+              {usersStatus === "success" && !hasUsers ? (
+                <section className="surface-panel p-8 text-center">
+                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
+                    Empty workspace
+                  </p>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+                    No Messenger users have landed yet
+                  </h2>
+                  <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--text-secondary)]">
+                    Send a test message to your connected Facebook Page and Spendly
+                    will create the first profile automatically.
+                  </p>
+                </section>
+              ) : null}
+
+              <SummaryCards
+                stats={stats}
+                activePeriod={activePeriod}
+                currency={currency}
+                isLoading={detailsStatus === "loading"}
+                error={detailsStatus === "error" ? detailsError : null}
+                isDisabled={!hasUsers}
+                onSelectPeriod={(nextPeriod) => {
+                  startTransition(() => {
+                    setActivePeriod(nextPeriod);
+                  });
+                }}
+              />
+
+              <InsightsPanel
+                insights={insights}
+                isLoading={
+                  detailsStatus === "loading" ||
+                  (categoryStatus === "loading" && activePeriod === categoryData?.period)
+                }
+                error={
+                  detailsStatus === "error"
+                    ? detailsError
+                    : categoryStatus === "error"
+                      ? categoryError
+                      : null
+                }
+                isDisabled={!hasUsers}
+              />
+
+              <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <CategoryChart
+                  categoryData={categoryData}
+                  period={activePeriod}
+                  onPeriodChange={(nextPeriod) => {
+                    startTransition(() => {
+                      setActivePeriod(nextPeriod);
+                    });
+                  }}
+                  isLoading={categoryStatus === "loading"}
+                  error={categoryStatus === "error" ? categoryError : null}
+                  isDisabled={!hasUsers}
+                  hiddenCategories={hiddenCategories}
+                  onToggleCategory={(category) => {
+                    setHiddenCategories((current) =>
+                      current.includes(category)
+                        ? current.filter((item) => item !== category)
+                        : [...current, category],
+                    );
+                  }}
+                />
+
+                <RecentTransactions
+                  groups={groupedTransactions}
+                  isLoading={detailsStatus === "loading"}
+                  error={detailsStatus === "error" ? detailsError : null}
+                  isDisabled={!hasUsers}
+                  period={activePeriod}
+                  query={searchQuery}
+                  onQueryChange={setSearchQuery}
+                />
+              </div>
+            </div>
+          </main>
         </div>
       </div>
-    </main>
+
+      <button
+        type="button"
+        onClick={() => setIsLogModalOpen(true)}
+        className="fixed bottom-6 right-6 z-40 flex h-16 items-center gap-3 rounded-full bg-[var(--accent-primary)] px-5 text-sm font-semibold text-white shadow-[var(--shadow-strong)] transition hover:-translate-y-0.5 hover:brightness-105"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/16">
+          <PlusIcon className="h-5 w-5" />
+        </span>
+        <span className="hidden sm:inline">Log expense</span>
+      </button>
+
+      {successToast ? (
+        <div className="fixed bottom-24 right-6 z-40 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] shadow-[var(--shadow-soft)]">
+          {successToast}
+        </div>
+      ) : null}
+
+      <LogExpenseModal
+        isOpen={isLogModalOpen}
+        selectedUserLabel={
+          selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || null
+        }
+        onClose={() => setIsLogModalOpen(false)}
+        onSubmit={handleLogExpense}
+      />
+    </div>
   );
 }
