@@ -1,103 +1,100 @@
 # Spendly
 
-Spendly is a chat-based expense tracker with two apps in one monorepo:
+Spendly is a chat-first expense tracker with a FastAPI backend and a Next.js dashboard. Messenger messages such as `coffee 5` are parsed into expenses, stored in PostgreSQL, and surfaced in a live analytics workspace.
 
-- `backend/`: FastAPI API, SQLAlchemy models, Alembic migrations, Messenger webhook processing, and rule-based expense parsing.
-- `frontend/`: Next.js internal dashboard for viewing users, spending totals, category breakdowns, and recent transactions.
+## What is included
 
-For the MVP, a Messenger user sends a message like `coffee 5`, the backend parses it into an expense, stores it in PostgreSQL, and the dashboard reads the resulting analytics over REST.
+- Messenger webhook verification and event ingestion
+- Idempotent webhook processing so duplicate Messenger events do not double-log expenses
+- Rule-based expense parsing from short chat messages
+- REST endpoints for users, expenses, and analytics
+- Manual expense create, edit, and delete support
+- Live Next.js dashboard with user selection, search, summary cards, category charts, recent transactions, analytics, settings, and light/dark theme controls
+- PostgreSQL schema managed with Alembic
+- Backend tests for parsing, expenses, analytics, and webhook behavior
 
-## MVP architecture
+## Tech stack
 
-1. Meta Messenger sends a webhook event to `POST /api/webhook/messenger`.
-2. Spendly stores the raw event in `webhook_events` using a stable `event_key`.
-3. Duplicate events are ignored safely.
-4. The backend upserts a `users` row by `messenger_psid`.
-5. The parser extracts `amount`, `category`, `note`, and `source_text`.
-6. On success, the backend stores an `expenses` row and sends a confirmation reply.
-7. The Next.js dashboard reads `/api/users`, `/api/analytics/*`, and `/api/expenses`.
+- Backend: Python 3.12, FastAPI, SQLAlchemy, Alembic, Pydantic Settings, PostgreSQL
+- Frontend: Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts
+- Local infrastructure: Docker Compose for PostgreSQL
 
-## Repo structure
+## Repository layout
 
 ```text
-backend/
-  alembic/
-  app/
-  tests/
-frontend/
-  app/
-  components/
-  lib/
-docker-compose.yml
-README.md
+.
+|-- backend/
+|   |-- alembic/
+|   |-- app/
+|   |   |-- api/
+|   |   |-- core/
+|   |   |-- db/
+|   |   |-- models/
+|   |   |-- schemas/
+|   |   `-- services/
+|   |-- tests/
+|   `-- pyproject.toml
+|-- frontend/
+|   |-- app/
+|   |-- components/
+|   |-- lib/
+|   `-- package.json
+|-- docker-compose.yml
+`-- README.md
 ```
 
 ## Prerequisites
 
 - Docker Desktop
 - Python 3.12+
-- Node.js 24+
-- npm 11+
+- Node.js 20+ recommended
+- npm
 
-## Environment files
+## Environment setup
 
-### Root `.env`
-
-Create the backend env file from the repo root:
+The backend reads configuration from the root `.env` file. Create one at the repository root:
 
 ```powershell
-Copy-Item .env.example .env
+@"
+APP_NAME=Spendly API
+ENVIRONMENT=development
+FRONTEND_URL=http://localhost:3000
+
+MESSENGER_VERIFY_TOKEN=spendly-dev-verify-token
+MESSENGER_REPLY_MODE=stub
+MESSENGER_PAGE_ACCESS_TOKEN=
+MESSENGER_API_BASE_URL=https://graph.facebook.com/v22.0
+MESSENGER_REQUEST_TIMEOUT_SECONDS=10
+
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_NAME=spendly
+DATABASE_USER=spendly
+DATABASE_PASSWORD=spendly
+DATABASE_ECHO=false
+"@ | Set-Content .env
 ```
 
-Required variables:
-
-| Variable | Purpose | Local default |
-| --- | --- | --- |
-| `APP_NAME` | FastAPI app title | `Spendly API` |
-| `ENVIRONMENT` | Controls debug mode | `development` |
-| `FRONTEND_URL` | Allowed local frontend origin for CORS | `http://localhost:3000` |
-| `MESSENGER_VERIFY_TOKEN` | Token Meta must send back during webhook verification | `spendly-dev-verify-token` |
-| `MESSENGER_REPLY_MODE` | `stub` for local testing or `send_api` for real Messenger replies | `stub` |
-| `MESSENGER_PAGE_ACCESS_TOKEN` | Page access token for Send API replies | empty |
-| `MESSENGER_API_BASE_URL` | Graph API base URL | `https://graph.facebook.com/v22.0` |
-| `MESSENGER_REQUEST_TIMEOUT_SECONDS` | Send API timeout | `10` |
-| `DATABASE_HOST` | PostgreSQL hostname | `localhost` |
-| `DATABASE_PORT` | PostgreSQL port | `5432` |
-| `DATABASE_NAME` | PostgreSQL database name | `spendly` |
-| `DATABASE_USER` | PostgreSQL username | `spendly` |
-| `DATABASE_PASSWORD` | PostgreSQL password | `spendly` |
-| `DATABASE_ECHO` | SQLAlchemy SQL logging toggle | `false` |
-
-### Frontend `.env.local`
-
-Create the frontend env file:
+The frontend reads its API URL from `frontend/.env.local`:
 
 ```powershell
-cd frontend
-Copy-Item .env.example .env.local
-cd ..
+@"
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+"@ | Set-Content frontend\.env.local
 ```
 
-Required variable:
+For local Messenger testing, keep `MESSENGER_REPLY_MODE=stub`. Set `MESSENGER_REPLY_MODE=send_api` and provide `MESSENGER_PAGE_ACCESS_TOKEN` only when you are ready to send real Messenger replies.
 
-| Variable | Purpose | Local default |
-| --- | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Backend base URL used by the dashboard | `http://localhost:8000` |
+## Local development
 
-## Local development setup
-
-### 1. Start PostgreSQL
-
-From the repo root:
+Start PostgreSQL:
 
 ```powershell
 docker compose up -d db
 docker compose ps
 ```
 
-`docker compose ps` should show the `db` container as healthy.
-
-### 2. Install backend dependencies
+Install backend dependencies:
 
 ```powershell
 cd backend
@@ -106,23 +103,15 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-### 3. Run Alembic migrations
+Run database migrations:
 
 ```powershell
 cd backend
+.\.venv\Scripts\Activate.ps1
 alembic upgrade head
 ```
 
-Useful migration commands:
-
-```powershell
-cd backend
-alembic current
-alembic history
-alembic revision -m "describe change"
-```
-
-### 4. Run the backend
+Start the backend API:
 
 ```powershell
 cd backend
@@ -130,15 +119,9 @@ cd backend
 uvicorn app.main:app --reload
 ```
 
-Useful endpoints:
+The API runs at `http://localhost:8000`.
 
-- `http://localhost:8000/health`
-- `http://localhost:8000/api/users`
-- `http://localhost:8000/api/webhook/messenger`
-
-### 5. Run the frontend
-
-Open a second terminal:
+Start the frontend in another terminal:
 
 ```powershell
 cd frontend
@@ -148,9 +131,9 @@ npm run dev
 
 The dashboard runs at `http://localhost:3000`.
 
-## Running tests
+## Useful commands
 
-From the backend directory:
+Backend tests:
 
 ```powershell
 cd backend
@@ -158,35 +141,68 @@ cd backend
 pytest
 ```
 
-The Phase 6 test suite covers:
+Frontend production build:
 
-- Parser success and failure cases
-- Manual expense creation and expense listing
-- Summary, by-category, and recent analytics endpoints
-- Messenger webhook verification
-- New webhook processing
-- Duplicate webhook idempotency
-- Parse-failure webhook handling
+```powershell
+cd frontend
+npm run build
+```
+
+Alembic helpers:
+
+```powershell
+cd backend
+alembic current
+alembic history
+alembic revision -m "describe change"
+alembic upgrade head
+```
+
+## API endpoints
+
+- `GET /health`
+- `GET /api/users`
+- `GET /api/expenses?user_id=1&limit=20&offset=0`
+- `POST /api/expenses`
+- `PATCH /api/expenses/{expense_id}`
+- `DELETE /api/expenses/{expense_id}`
+- `GET /api/analytics/summary?user_id=1`
+- `GET /api/analytics/by-category?user_id=1&period=month`
+- `GET /api/analytics/recent?user_id=1&limit=10`
+- `GET /api/webhook/messenger`
+- `POST /api/webhook/messenger`
 
 ## Manual API checks
 
-### Create a manual expense
+Health check:
 
-First create or identify a user. For a quick local seed, use the Messenger webhook example below or insert a user in a database client. Then call:
+```powershell
+curl.exe http://127.0.0.1:8000/health
+```
+
+Create a manual expense after a user exists:
 
 ```powershell
 curl.exe -X POST http://127.0.0.1:8000/api/expenses `
   -H "Content-Type: application/json" `
-  -d "{\"user_id\":1,\"amount\":\"5.25\",\"category\":\"food\",\"note\":\"iced coffee\"}"
+  -d "{\"user_id\":1,\"amount\":\"5.25\",\"category\":\"food\",\"note\":\"iced coffee\",\"source_text\":\"coffee 5.25\"}"
 ```
 
-### List expenses for one user
+Update an expense:
 
 ```powershell
-curl.exe "http://127.0.0.1:8000/api/expenses?user_id=1&limit=20&offset=0"
+curl.exe -X PATCH http://127.0.0.1:8000/api/expenses/1 `
+  -H "Content-Type: application/json" `
+  -d "{\"amount\":\"6.00\",\"category\":\"food\",\"note\":\"latte\"}"
 ```
 
-### Read analytics
+Delete an expense:
+
+```powershell
+curl.exe -X DELETE http://127.0.0.1:8000/api/expenses/1
+```
+
+Read analytics:
 
 ```powershell
 curl.exe "http://127.0.0.1:8000/api/analytics/summary?user_id=1"
@@ -194,9 +210,9 @@ curl.exe "http://127.0.0.1:8000/api/analytics/by-category?user_id=1&period=month
 curl.exe "http://127.0.0.1:8000/api/analytics/recent?user_id=1&limit=10"
 ```
 
-## Testing the webhook locally
+## Testing Messenger locally
 
-### Verification endpoint
+Verify the webhook challenge endpoint:
 
 ```powershell
 curl.exe "http://127.0.0.1:8000/api/webhook/messenger?hub.mode=subscribe&hub.verify_token=spendly-dev-verify-token&hub.challenge=12345"
@@ -208,9 +224,7 @@ Expected response body:
 12345
 ```
 
-### Local webhook delivery with a sample Messenger payload
-
-With the backend running, send a sample expense message:
+Send a sample Messenger expense event:
 
 ```powershell
 curl.exe -X POST http://127.0.0.1:8000/api/webhook/messenger `
@@ -220,23 +234,23 @@ curl.exe -X POST http://127.0.0.1:8000/api/webhook/messenger `
 
 Expected behavior:
 
-- one `webhook_events` row is stored
-- one `users` row is created or reused for `psid-123`
-- one `expenses` row is created
-- the response JSON reports `processed: 1`
-- if `MESSENGER_REPLY_MODE=stub`, the confirmation reply is logged by the backend only
+- a `webhook_events` row is stored
+- a `users` row is created or reused for `psid-123`
+- an `expenses` row is created
+- the response reports `processed: 1`
+- in stub reply mode, the reply is logged instead of sent to Messenger
 
-To verify idempotency, send the exact same payload again. The second response should report `duplicates: 1`, and Spendly should not create another expense or send another reply.
+Send the exact same payload again to verify idempotency. Spendly should report a duplicate and should not create a second expense.
 
-## Exposing the local webhook to Meta
+## Exposing the webhook to Meta
 
-Meta needs a public HTTPS URL for webhook verification and delivery. The simplest local workflow is:
+Meta needs a public HTTPS callback URL. A typical local workflow is:
 
 1. Run PostgreSQL, migrations, and the backend locally.
-2. Start a tunnel that forwards public HTTPS traffic to `http://localhost:8000`.
-3. Use the public URL plus `/api/webhook/messenger` as the callback URL in Meta.
-4. Set Meta's verify token to the same value as `MESSENGER_VERIFY_TOKEN` in your root `.env`.
-5. Subscribe the page/app to the `messages` webhook field.
+2. Start a tunnel to `http://localhost:8000`.
+3. Use the tunnel URL plus `/api/webhook/messenger` as the Meta callback URL.
+4. Set Meta's verify token to the same value as `MESSENGER_VERIFY_TOKEN`.
+5. Subscribe the app or page to the `messages` webhook field.
 6. Send a message to the connected page and watch the backend logs.
 
 Example tunnel commands:
@@ -245,30 +259,23 @@ Example tunnel commands:
 ngrok http 8000
 ```
 
-or
-
 ```powershell
 cloudflared tunnel --url http://localhost:8000
 ```
 
-Your Meta callback URL should look like:
+The callback URL should look like:
 
 ```text
 https://your-public-url.example/api/webhook/messenger
 ```
 
-## Using real Messenger replies
+## Dashboard workflow
 
-For local development without a real page token, keep:
+1. Start the backend and frontend.
+2. Create a user by sending a sample Messenger webhook event.
+3. Open `http://localhost:3000`.
+4. Select the Messenger user.
+5. Use the floating log button to add expenses manually, or send more webhook payloads.
+6. Use search, period controls, category filters, analytics, and settings to inspect the live data.
 
-```text
-MESSENGER_REPLY_MODE=stub
-```
-
-When you are ready to test real replies:
-
-1. Set `MESSENGER_REPLY_MODE=send_api`
-2. Set `MESSENGER_PAGE_ACCESS_TOKEN` to a valid page access token
-3. Restart the backend
-
-If the Send API call fails, Spendly still keeps the already stored expense and logs the reply failure instead of rolling back the webhook result.
+The dashboard polls the backend every 3 seconds so webhook activity and manual edits appear without a full page refresh.
