@@ -43,6 +43,19 @@ export type ParsedExpenseDraft = {
   reason: string | null;
 };
 
+export const EXPENSE_CATEGORIES = [
+  "food",
+  "transport",
+  "groceries",
+  "shopping",
+  "entertainment",
+  "bills",
+  "health",
+  "education",
+  "travel",
+  "other",
+] as const;
+
 type PeriodRange = {
   currentStart: Date;
   previousStart: Date;

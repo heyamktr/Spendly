@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import type { ExpenseResponse, ExpenseUpdateInput } from "@/lib/api";
+import { EXPENSE_CATEGORIES } from "@/lib/dashboard";
 import { CloseIcon } from "@/components/icons";
 
 type EditExpenseModalProps = {
@@ -11,19 +12,6 @@ type EditExpenseModalProps = {
   onClose: () => void;
   onSubmit: (expenseId: number, payload: ExpenseUpdateInput) => Promise<void>;
 };
-
-const CATEGORY_OPTIONS = [
-  "food",
-  "transport",
-  "groceries",
-  "shopping",
-  "entertainment",
-  "bills",
-  "health",
-  "education",
-  "travel",
-  "other",
-] as const;
 
 export function EditExpenseModal({
   expense,
@@ -155,7 +143,7 @@ export function EditExpenseModal({
                 onChange={(event) => setCategory(event.target.value)}
                 className="h-12 w-full rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
               >
-                {CATEGORY_OPTIONS.map((option) => (
+                {EXPENSE_CATEGORIES.map((option) => (
                   <option key={option} value={option}>
                     {option.charAt(0).toUpperCase() + option.slice(1)}
                   </option>

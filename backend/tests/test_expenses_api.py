@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
 
 from app.models.expense import Expense
+from app.services import receipt_service
 
 
 def test_create_manual_expense_for_existing_user(client, create_user, db_session) -> None:
@@ -131,3 +133,36 @@ def test_delete_expense_removes_row(client, create_user, create_expense, db_sess
     assert response.status_code == 204
     assert response.content == b""
     assert db_session.get(Expense, expense.id) is None
+
+
+def test_scan_receipt_returns_parsed_preview(client, create_user, monkeypatch) -> None:
+    user = create_user(messenger_psid="psid-expense-scan")
+
+    monkeypatch.setattr(
+        receipt_service,
+        "_extract_text_with_tesseract",
+        lambda _image_bytes, *, file_name: """
+        BENTO SUSHI
+        salmon roll 12.50
+        miso soup 3.00
+        TOTAL 18.45
+        """,
+    )
+
+    response = client.post(
+        "/api/expenses/scan-receipt",
+        json={
+            "user_id": user.id,
+            "file_name": "receipt.png",
+            "content_type": "image/png",
+            "image_base64": base64.b64encode(b"fake-image-bytes").decode("ascii"),
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    assert Decimal(str(data["amount"])) == Decimal("18.45")
+    assert data["category"] == "food"
+    assert data["note"] == "BENTO SUSHI"
+    assert data["source_text"] == "receipt scan: BENTO SUSHI total 18.45"

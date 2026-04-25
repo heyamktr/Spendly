@@ -64,6 +64,18 @@ export type AnalyticsRecentResponse = {
   items: ExpenseResponse[];
 };
 
+export type ReceiptScanResponse = {
+  success: boolean;
+  amount: MoneyValue | null;
+  currency: string;
+  category: string | null;
+  note: string | null;
+  source_text: string | null;
+  confidence: "high" | "medium" | null;
+  reason: string | null;
+  ocr_text: string | null;
+};
+
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 
 export class ApiError extends Error {
@@ -142,6 +154,21 @@ export async function createExpense(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(expense),
+  });
+}
+
+export async function scanReceiptExpense(payload: {
+  user_id: number;
+  file_name: string;
+  content_type?: string | null;
+  image_base64: string;
+}): Promise<ReceiptScanResponse> {
+  return fetchJson<ReceiptScanResponse>("/api/expenses/scan-receipt", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
   });
 }
 
