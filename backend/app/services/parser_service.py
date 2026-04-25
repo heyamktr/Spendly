@@ -19,6 +19,9 @@ CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
         "cafe",
         "snack",
         "tea",
+        "pizza",
+        "burger",
+        "sushi",
     ),
     "transport": (
         "uber",
@@ -120,7 +123,7 @@ def parse_expense_message(text: str | None) -> ParsedExpenseResult:
             continue
 
         note = _build_note(source_text, match.span())
-        category = _infer_category(source_text)
+        category = infer_category_from_text(source_text)
         confidence = (
             ParserConfidence.high if category != "other" else ParserConfidence.medium
         )
@@ -152,7 +155,7 @@ def _build_note(source_text: str, amount_span: tuple[int, int]) -> str | None:
     return normalized or None
 
 
-def _infer_category(source_text: str) -> str:
+def infer_category_from_text(source_text: str) -> str:
     lowered = source_text.lower()
     for category, keywords in CATEGORY_KEYWORDS.items():
         for keyword in keywords:

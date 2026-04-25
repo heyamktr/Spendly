@@ -131,6 +131,17 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function ReceiptIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 3.5h8l3 3V20l-2.2-1.4L13.8 20l-1.8-1.4L10.2 20 8.2 18.6 6 20V5.5A2 2 0 0 1 8 3.5Z" />
+      <path d="M9 9.5h6" />
+      <path d="M9 13h6" />
+      <path d="M9 16.5h3.5" />
+    </IconBase>
+  );
+}
+
 export function CloseIcon(props: IconProps) {
   return (
     <IconBase {...props}>

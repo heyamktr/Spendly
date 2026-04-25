@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     messenger_page_access_token: str | None = None
     messenger_api_base_url: str = "https://graph.facebook.com/v22.0"
     messenger_request_timeout_seconds: float = 10.0
+    tesseract_path: str | None = None
+    receipt_ocr_timeout_seconds: float = 20.0
 
     database_host: str = "localhost"
     database_port: int = 5432

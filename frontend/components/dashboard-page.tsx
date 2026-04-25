@@ -13,6 +13,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { EditExpenseModal } from "@/components/edit-expense-modal";
 import { InsightsPanel } from "@/components/insights-panel";
 import { LogExpenseModal } from "@/components/log-expense-modal";
+import { ReceiptScanModal } from "@/components/receipt-scan-modal";
 import { RecentTransactions } from "@/components/recent-transactions";
 import { SpendlySidebar, type AppSection } from "@/components/spendly-sidebar";
 import { SummaryCards } from "@/components/summary-cards";
@@ -30,11 +31,13 @@ import {
   fetchExpenses,
   fetchUsers,
   getErrorMessage,
+  scanReceiptExpense,
   updateExpense,
   type AnalyticsByCategoryResponse,
   type AnalyticsPeriod,
   type AnalyticsSummaryResponse,
   type ExpenseResponse,
+  type ReceiptScanResponse,
   type UserListItem,
 } from "@/lib/api";
 import {
@@ -45,7 +48,7 @@ import {
   parseExpenseDraft,
   type ThemeMode,
 } from "@/lib/dashboard";
-import { PlusIcon } from "@/components/icons";
+import { PlusIcon, ReceiptIcon } from "@/components/icons";
 
 type DashboardPageProps = {
   apiBaseUrl: string;
@@ -96,6 +99,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseResponse | null>(null);
   const [busyExpenseId, setBusyExpenseId] = useState<number | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
@@ -362,6 +366,48 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     });
 
     setSuccessToast(`Logged "${message}" for ${selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || "the selected user"}.`);
+    setManualRefreshVersion((current) => current + 1);
+  }
+
+  async function handleAnalyzeReceipt(file: File): Promise<ReceiptScanResponse> {
+    if (selectedUserId === null) {
+      throw new Error("Select a Messenger user before scanning a receipt.");
+    }
+
+    const imageBase64 = await readFileAsDataUrl(file);
+    return scanReceiptExpense({
+      user_id: selectedUserId,
+      file_name: file.name,
+      content_type: file.type || null,
+      image_base64: imageBase64,
+    });
+  }
+
+  async function handleSaveReceiptExpense(payload: {
+    amount: number;
+    category: string;
+    note: string | null;
+    source_text: string | null;
+  }) {
+    if (selectedUserId === null) {
+      throw new Error("Select a Messenger user before saving a receipt expense.");
+    }
+
+    await createExpense({
+      user_id: selectedUserId,
+      amount: payload.amount,
+      currency: "USD",
+      category: payload.category,
+      note: payload.note,
+      source_text: payload.source_text,
+      occurred_at: new Date().toISOString(),
+    });
+
+    setSuccessToast(
+      `Logged receipt${payload.note ? ` from "${payload.note}"` : ""} for ${
+        selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || "the selected user"
+      }.`,
+    );
     setManualRefreshVersion((current) => current + 1);
   }
 
@@ -637,19 +683,32 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setIsLogModalOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex h-16 items-center gap-3 rounded-full bg-[var(--accent-primary)] px-5 text-sm font-semibold text-white shadow-[var(--shadow-strong)] transition hover:-translate-y-0.5 hover:brightness-105"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/16">
-          <PlusIcon className="h-5 w-5" />
-        </span>
-        <span className="hidden sm:inline">Log expense</span>
-      </button>
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => setIsReceiptModalOpen(true)}
+          className="flex h-14 items-center gap-3 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-5 text-sm font-semibold text-[var(--text-primary)] shadow-[var(--shadow-soft)] transition hover:-translate-y-0.5"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface-elevated)] text-[var(--accent-primary)]">
+            <ReceiptIcon className="h-5 w-5" />
+          </span>
+          <span className="hidden sm:inline">Scan receipt</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsLogModalOpen(true)}
+          className="flex h-16 items-center gap-3 rounded-full bg-[var(--accent-primary)] px-5 text-sm font-semibold text-white shadow-[var(--shadow-strong)] transition hover:-translate-y-0.5 hover:brightness-105"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/16">
+            <PlusIcon className="h-5 w-5" />
+          </span>
+          <span className="hidden sm:inline">Log expense</span>
+        </button>
+      </div>
 
       {successToast ? (
-        <div className="fixed bottom-24 right-6 z-40 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] shadow-[var(--shadow-soft)]">
+        <div className="fixed bottom-40 right-6 z-40 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3 text-sm font-medium text-[var(--text-primary)] shadow-[var(--shadow-soft)]">
           {successToast}
         </div>
       ) : null}
@@ -661,6 +720,16 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         }
         onClose={() => setIsLogModalOpen(false)}
         onSubmit={handleLogExpense}
+      />
+
+      <ReceiptScanModal
+        isOpen={isReceiptModalOpen}
+        selectedUserLabel={
+          selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || null
+        }
+        onAnalyze={handleAnalyzeReceipt}
+        onClose={() => setIsReceiptModalOpen(false)}
+        onSubmit={handleSaveReceiptExpense}
       />
 
       <EditExpenseModal
@@ -709,4 +778,25 @@ function getPageDescription(
   return selectedUserLabel
     ? `Managing workspace preferences and live sync details for ${selectedUserLabel}.`
     : "Tune workspace preferences, sync behavior, and layout controls.";
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result === "string" && reader.result) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Could not read that receipt image."));
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Could not read that receipt image."));
+    };
+
+    reader.readAsDataURL(file);
+  });
 }

@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
-from app.services import expense_service, user_service
+from app.schemas.receipt import ReceiptScanRequest, ReceiptScanResponse
+from app.services import expense_service, receipt_service, user_service
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
@@ -34,6 +35,24 @@ def create_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
 
     return expense_service.create_expense(db, user=user, expense_in=expense_in)
+
+
+@router.post("/scan-receipt", response_model=ReceiptScanResponse)
+def scan_receipt(
+    receipt_in: ReceiptScanRequest,
+    db: Session = Depends(get_db),
+) -> ReceiptScanResponse:
+    user = user_service.get_user_by_id(db, receipt_in.user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+
+    return receipt_service.scan_receipt(
+        db,
+        user=user,
+        file_name=receipt_in.file_name,
+        content_type=receipt_in.content_type,
+        image_base64=receipt_in.image_base64,
+    )
 
 
 @router.patch("/{expense_id}", response_model=ExpenseResponse)
