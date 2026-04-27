@@ -1,0 +1,12 @@
+{
+  "name": "spendly",
+  "private": true,
+  "scripts": {
+    "check": "npm run frontend:check && npm run backend:lint && npm run backend:test",
+    "frontend:check": "npm --prefix frontend run check",
+    "frontend:typecheck": "npm --prefix frontend run typecheck",
+    "frontend:build": "npm --prefix frontend run build",
+    "backend:lint": "node scripts/run-backend.mjs -m ruff check --no-cache .",
+    "backend:test": "node scripts/run-backend.mjs -m pytest"
+  }
+}
