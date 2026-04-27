@@ -21,6 +21,7 @@ dependencies = [
 dev = [
   "httpx>=0.28,<1.0",
   "pytest>=8.4,<9.0",
+  "ruff>=0.8,<1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -28,4 +29,13 @@ where = ["."]
 include = ["app*"]
 
 [tool.pytest.ini_options]
+addopts = "-ra -p no:cacheprovider"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]

@@ -70,16 +70,16 @@ const PERIOD_LABELS: Record<AnalyticsPeriod, string> = {
 };
 
 const CATEGORY_EMOJI: Record<string, string> = {
-  bills: "🧾",
-  education: "📚",
-  entertainment: "🎬",
-  food: "🍽️",
-  groceries: "🛒",
-  health: "🩺",
-  other: "💳",
-  shopping: "🛍️",
-  transport: "🚕",
-  travel: "✈️",
+  bills: "\u{1F9FE}",
+  education: "\u{1F4DA}",
+  entertainment: "\u{1F3AC}",
+  food: "\u{1F37D}\u{FE0F}",
+  groceries: "\u{1F6D2}",
+  health: "\u{1FA7A}",
+  other: "\u{1F4B3}",
+  shopping: "\u{1F6CD}\u{FE0F}",
+  transport: "\u{1F695}",
+  travel: "\u{2708}\u{FE0F}",
 };
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
