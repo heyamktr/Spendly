@@ -141,11 +141,33 @@ cd backend
 pytest
 ```
 
+Backend lint:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+ruff check --no-cache .
+```
+
+Frontend type check:
+
+```powershell
+cd frontend
+npm run typecheck
+```
+
 Frontend production build:
 
 ```powershell
 cd frontend
 npm run build
+```
+
+Frontend full check:
+
+```powershell
+cd frontend
+npm run check
 ```
 
 Alembic helpers:

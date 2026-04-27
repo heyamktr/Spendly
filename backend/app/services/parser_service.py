@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 
-from app.schemas.parser import ParseFailureReason, ParsedExpenseResult, ParserConfidence
+from app.schemas.parser import ParsedExpenseResult, ParseFailureReason, ParserConfidence
 
 AMOUNT_PATTERN = re.compile(r"(?<!\w)(?:\$)?(?P<amount>\d+(?:\.\d+)?)(?!\w)")
 

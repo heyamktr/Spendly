@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.webhook_event import WebhookEvent
-from app.schemas.parser import ParseFailureReason, ParsedExpenseResult
+from app.schemas.parser import ParsedExpenseResult, ParseFailureReason
 from app.schemas.webhook import WebhookIntakeResponse
 from app.services import expense_service, parser_service, user_service
 from app.services.messenger_service import MessengerService

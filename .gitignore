@@ -6,9 +6,11 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+backend/pytest-cache-files-*/
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage.*
 htmlcov/
 
 backend/.venv/
@@ -21,6 +23,7 @@ frontend/.next/
 frontend/out/
 frontend/.env.local
 frontend/.turbo/
+frontend/tsconfig.tsbuildinfo
 
 .DS_Store
 Thumbs.db
