@@ -3,25 +3,30 @@
 import { useEffect, useState } from "react";
 
 import { formatCurrency } from "@/lib/api";
-import { getCategoryLabel, parseExpenseDraft } from "@/lib/dashboard";
+import { getCategoryLabel, parseExpenseDraft, type CategoryOption } from "@/lib/dashboard";
 import { CloseIcon, PlusIcon } from "@/components/icons";
 
 type LogExpenseModalProps = {
+  categoryOptions: CategoryOption[];
   isOpen: boolean;
   selectedUserLabel: string | null;
   onClose: () => void;
-  onSubmit: (message: string) => Promise<void>;
+  onSubmit: (message: string, category: string) => Promise<void>;
 };
 
 export function LogExpenseModal({
+  categoryOptions,
   isOpen,
   selectedUserLabel,
   onClose,
   onSubmit,
 }: LogExpenseModalProps) {
   const [draft, setDraft] = useState("");
+  const [category, setCategory] = useState("other");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const categoryValues = categoryOptions.map((option) => option.value);
+  const preview = parseExpenseDraft(draft, categoryValues);
 
   useEffect(() => {
     if (!isOpen) {
@@ -39,16 +44,21 @@ export function LogExpenseModal({
   useEffect(() => {
     if (!isOpen) {
       setDraft("");
+      setCategory("other");
       setSubmitError(null);
       setIsSubmitting(false);
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (preview.success && preview.category) {
+      setCategory(preview.category);
+    }
+  }, [preview.category, preview.success]);
+
   if (!isOpen) {
     return null;
   }
-
-  const preview = parseExpenseDraft(draft);
 
   async function handleSubmit() {
     if (!preview.success || !draft.trim()) {
@@ -59,7 +69,7 @@ export function LogExpenseModal({
     setSubmitError(null);
 
     try {
-      await onSubmit(draft.trim());
+      await onSubmit(draft.trim(), category);
       onClose();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Could not log expense.");
@@ -139,7 +149,25 @@ export function LogExpenseModal({
             <div className="mt-5 rounded-[24px] border border-[var(--border-subtle)] bg-[var(--surface-card)] p-4">
               {preview.success ? (
                 <div className="space-y-4">
-                  <PreviewRow label="Category" value={getCategoryLabel(preview.category ?? "other")} />
+                  <label className="block rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 py-3">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+                      Category
+                    </span>
+                    <select
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      className="mt-2 h-11 w-full rounded-[16px] border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 text-sm font-medium text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
+                    >
+                      {categoryOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                      {categoryOptions.every((option) => option.value !== category) ? (
+                        <option value={category}>{getCategoryLabel(category)}</option>
+                      ) : null}
+                    </select>
+                  </label>
                   <PreviewRow
                     label="Amount"
                     value={formatCurrency(preview.amount ?? 0, "USD")}

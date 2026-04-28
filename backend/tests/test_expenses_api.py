@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import base64
+import csv
 from datetime import UTC, datetime
 from decimal import Decimal
+from io import StringIO
 
 from sqlalchemy import select
 
@@ -81,6 +83,51 @@ def test_list_expenses_newest_first_for_one_user_only(
     assert [item["id"] for item in data] == [newer_expense.id, older_expense.id]
     assert {item["user_id"] for item in data} == {user.id}
     assert [item["source_text"] for item in data] == ["newer uber", "older lunch"]
+
+
+def test_export_expenses_csv_for_one_user_only(client, create_user, create_expense) -> None:
+    user = create_user(messenger_psid="psid-expense-export")
+    other_user = create_user(messenger_psid="psid-expense-export-other")
+
+    older_expense = create_expense(
+        user=user,
+        amount="4.50",
+        category="food",
+        note="lunch",
+        source_text="older lunch",
+        occurred_at=datetime(2026, 4, 10, 12, 0, tzinfo=UTC),
+    )
+    newer_expense = create_expense(
+        user=user,
+        amount="12.00",
+        category="side quest",
+        note="=formula-safe",
+        source_text="@dangerous source",
+        occurred_at=datetime(2026, 4, 11, 8, 30, tzinfo=UTC),
+    )
+    create_expense(
+        user=other_user,
+        amount="99.00",
+        category="shopping",
+        source_text="other user purchase",
+    )
+
+    response = client.get("/api/expenses/export.csv", params={"user_id": user.id})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert (
+        response.headers["content-disposition"]
+        == f'attachment; filename="spendly-user-{user.id}-expenses.csv"'
+    )
+
+    rows = list(csv.DictReader(StringIO(response.text)))
+    assert [int(row["id"]) for row in rows] == [newer_expense.id, older_expense.id]
+    assert {int(row["user_id"]) for row in rows} == {user.id}
+    assert rows[0]["category"] == "side quest"
+    assert rows[0]["note"] == "'=formula-safe"
+    assert rows[0]["source_text"] == "'@dangerous source"
+    assert rows[1]["amount"] == "4.50"
 
 
 def test_update_expense_changes_selected_fields(client, create_user, create_expense, db_session) -> None:

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { CategoryChart } from "@/components/category-chart";
 import { InsightsPanel } from "@/components/insights-panel";
 import { SummaryCards } from "@/components/summary-cards";
@@ -20,6 +22,8 @@ import {
   getCategoryEmoji,
   getCategoryLabel,
   getTransactionTitle,
+  normalizeCategoryInput,
+  type CategoryOption,
   type DashboardStat,
   type InsightItem,
   type ThemeMode,
@@ -47,10 +51,14 @@ type CategoriesWorkspaceProps = {
   activePeriod: AnalyticsPeriod;
   categoryData: AnalyticsByCategoryResponse | null;
   categoryError: string | null;
+  categoryOptions: CategoryOption[];
   categoryStatus: "idle" | "loading" | "success" | "error";
+  customCategories: string[];
   currentPeriodExpenses: ExpenseResponse[];
   hiddenCategories: string[];
   isDisabled: boolean;
+  onAddCustomCategory: (category: string) => void;
+  onDeleteCustomCategory: (category: string) => void;
   onResetHiddenCategories: () => void;
   onSelectPeriod: (period: AnalyticsPeriod) => void;
   onToggleCategory: (category: string) => void;
@@ -63,8 +71,10 @@ type SettingsWorkspaceProps = {
   currency: string;
   expenseCount: number;
   hiddenCategoriesCount: number;
+  isExportingCsv: boolean;
   lastSyncedAt: string | null;
   onClearSearch: () => void;
+  onExportCsv: () => void;
   onOpenLogModal: () => void;
   onRefreshNow: () => void;
   onResetHiddenCategories: () => void;
@@ -347,10 +357,14 @@ export function CategoriesWorkspace({
   activePeriod,
   categoryData,
   categoryError,
+  categoryOptions,
   categoryStatus,
+  customCategories,
   currentPeriodExpenses,
   hiddenCategories,
   isDisabled,
+  onAddCustomCategory,
+  onDeleteCustomCategory,
   onResetHiddenCategories,
   onSelectPeriod,
   onToggleCategory,
@@ -392,6 +406,13 @@ export function CategoriesWorkspace({
         isDisabled={isDisabled}
         hiddenCategories={hiddenCategories}
         onToggleCategory={onToggleCategory}
+      />
+
+      <CustomCategoryManager
+        categoryOptions={categoryOptions}
+        customCategories={customCategories}
+        onAddCustomCategory={onAddCustomCategory}
+        onDeleteCustomCategory={onDeleteCustomCategory}
       />
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -587,8 +608,10 @@ export function SettingsWorkspace({
   currency,
   expenseCount,
   hiddenCategoriesCount,
+  isExportingCsv,
   lastSyncedAt,
   onClearSearch,
+  onExportCsv,
   onOpenLogModal,
   onRefreshNow,
   onResetHiddenCategories,
@@ -623,6 +646,9 @@ export function SettingsWorkspace({
     "search",
     "filters",
     "categories",
+    "custom categories",
+    "export",
+    "csv",
     "log expense",
     "messenger",
   ]);
@@ -797,6 +823,17 @@ export function SettingsWorkspace({
               label="Open log expense modal"
               onClick={onOpenLogModal}
             />
+            <ActionRow
+              actionLabel={isExportingCsv ? "Exporting" : "Export"}
+              description={
+                selectedUser
+                  ? `Download every expense for ${getUserLabel(selectedUser)} as a CSV file.`
+                  : "Choose a Messenger user before exporting expense history."
+              }
+              disabled={!selectedUser || isExportingCsv}
+              label="Export expenses CSV"
+              onClick={onExportCsv}
+            />
           </div>
         </section>
       ) : null}
@@ -850,6 +887,124 @@ export function SettingsWorkspace({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function CustomCategoryManager({
+  categoryOptions,
+  customCategories,
+  onAddCustomCategory,
+  onDeleteCustomCategory,
+}: {
+  categoryOptions: CategoryOption[];
+  customCategories: string[];
+  onAddCustomCategory: (category: string) => void;
+  onDeleteCustomCategory: (category: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function handleAddCategory() {
+    const normalized = normalizeCategoryInput(draft);
+    if (!normalized) {
+      setFormError("Enter a category name first.");
+      return;
+    }
+
+    const existingOption = categoryOptions.find((option) => option.value === normalized);
+    if (existingOption?.source === "default") {
+      setFormError(`${existingOption.label} is already built in.`);
+      return;
+    }
+    if (existingOption?.source === "custom") {
+      setFormError(`${existingOption.label} is already in your custom list.`);
+      return;
+    }
+
+    onAddCustomCategory(normalized);
+    setDraft("");
+    setFormError(null);
+  }
+
+  return (
+    <section className="surface-panel card-entrance p-5 [animation-delay:140ms]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
+            Custom categories
+          </p>
+          <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
+            Shape your own spend lanes
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+            Add category names that fit your life, then use them while logging,
+            editing, and confirming receipt scans.
+          </p>
+        </div>
+        <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+          {customCategories.length} custom
+        </span>
+      </div>
+
+      <div className="mt-6 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="block">
+          <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.2em] text-[var(--text-tertiary)]">
+            Category name
+          </span>
+          <input
+            type="text"
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setFormError(null);
+            }}
+            placeholder="pet care"
+            className="h-12 w-full rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--text-primary)] outline-none transition placeholder:text-[var(--text-tertiary)] focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={handleAddCategory}
+          className="self-end rounded-full bg-[var(--accent-primary)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition hover:brightness-105"
+        >
+          Add category
+        </button>
+      </div>
+
+      {formError ? (
+        <div className="mt-4 rounded-[20px] border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger-text)]">
+          {formError}
+        </div>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap gap-2">
+        {customCategories.length === 0 ? (
+          <span className="rounded-full border border-dashed border-[var(--border-strong)] bg-[var(--surface-elevated)] px-4 py-2 text-sm text-[var(--text-tertiary)]">
+            No custom categories yet
+          </span>
+        ) : (
+          customCategories.map((category) => (
+            <span
+              key={category}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-medium text-[var(--text-primary)]"
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: getCategoryAccent(category) }}
+              />
+              {getCategoryLabel(category)}
+              <button
+                type="button"
+                onClick={() => onDeleteCustomCategory(category)}
+                className="ml-1 rounded-full px-2 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)] transition hover:bg-[var(--surface-card)] hover:text-[var(--text-primary)]"
+              >
+                Remove
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1002,11 +1157,13 @@ function ThemeOption({
 }
 
 function ActionRow({
+  actionLabel = "Run",
   description,
   disabled = false,
   label,
   onClick,
 }: {
+  actionLabel?: string;
   description: string;
   disabled?: boolean;
   label: string;
@@ -1023,10 +1180,10 @@ function ActionRow({
       <button
         type="button"
         onClick={onClick}
-        disabled={disabled}
-        className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Run
+      disabled={disabled}
+      className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+        {actionLabel}
       </button>
     </div>
   );

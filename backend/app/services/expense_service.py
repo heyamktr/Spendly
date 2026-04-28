@@ -22,6 +22,15 @@ def list_expenses(db: Session, *, user_id: int, limit: int, offset: int) -> list
     return list(db.scalars(statement))
 
 
+def list_all_expenses(db: Session, *, user_id: int) -> list[Expense]:
+    statement = (
+        select(Expense)
+        .where(Expense.user_id == user_id)
+        .order_by(Expense.occurred_at.desc(), Expense.id.desc())
+    )
+    return list(db.scalars(statement))
+
+
 def get_expense_by_id(db: Session, expense_id: int) -> Expense | None:
     return db.get(Expense, expense_id)
 

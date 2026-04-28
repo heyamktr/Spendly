@@ -43,6 +43,12 @@ export type ParsedExpenseDraft = {
   reason: string | null;
 };
 
+export type CategoryOption = {
+  value: string;
+  label: string;
+  source: "default" | "custom" | "observed";
+};
+
 export const EXPENSE_CATEGORIES = [
   "food",
   "transport",
@@ -55,6 +61,8 @@ export const EXPENSE_CATEGORIES = [
   "travel",
   "other",
 ] as const;
+
+const DEFAULT_CATEGORY_SET = new Set<string>(EXPENSE_CATEGORIES);
 
 type PeriodRange = {
   currentStart: Date;
@@ -289,7 +297,10 @@ export function groupTransactionsByDate(expenses: ExpenseResponse[]): Transactio
   return Array.from(groups.values());
 }
 
-export function parseExpenseDraft(text: string): ParsedExpenseDraft {
+export function parseExpenseDraft(
+  text: string,
+  categoryCandidates: readonly string[] = EXPENSE_CATEGORIES,
+): ParsedExpenseDraft {
   const sourceText = text.trim();
   if (!sourceText) {
     return {
@@ -328,7 +339,7 @@ export function parseExpenseDraft(text: string): ParsedExpenseDraft {
   const note = `${sourceText.slice(0, amountIndex)} ${sourceText.slice(amountIndex + match[0].length)}`
     .replace(/\s+/g, " ")
     .trim();
-  const category = inferCategory(sourceText);
+  const category = inferCategory(sourceText, categoryCandidates);
 
   return {
     success: true,
@@ -344,11 +355,17 @@ export function getCategoryEmoji(category: string): string {
 }
 
 export function getCategoryLabel(category: string): string {
-  if (!category) {
+  const normalized = category.trim();
+  if (!normalized) {
     return "Other";
   }
 
-  return category.charAt(0).toUpperCase() + category.slice(1);
+  return normalized
+    .split(/([\s_-]+)/)
+    .map((part) =>
+      /^[\s_-]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join("");
 }
 
 export function getCategoryAccent(category: string): string {
@@ -366,6 +383,55 @@ export function getCategoryAccent(category: string): string {
   };
 
   return accents[category] ?? accents.other;
+}
+
+export function normalizeCategoryInput(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function buildCategoryOptions({
+  customCategories,
+  observedCategories,
+}: {
+  customCategories: readonly string[];
+  observedCategories: readonly string[];
+}): CategoryOption[] {
+  const options: CategoryOption[] = EXPENSE_CATEGORIES.map((category) => ({
+    value: category,
+    label: getCategoryLabel(category),
+    source: "default",
+  }));
+  const seen = new Set(options.map((option) => option.value));
+
+  for (const category of customCategories) {
+    const normalized = normalizeCategoryInput(category);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    options.push({
+      value: normalized,
+      label: getCategoryLabel(normalized),
+      source: "custom",
+    });
+    seen.add(normalized);
+  }
+
+  for (const category of observedCategories) {
+    const normalized = normalizeCategoryInput(category);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    options.push({
+      value: normalized,
+      label: getCategoryLabel(normalized),
+      source: "observed",
+    });
+    seen.add(normalized);
+  }
+
+  return options;
 }
 
 export function getTransactionTitle(expense: ExpenseResponse): string {
@@ -636,8 +702,18 @@ function sumExpensesWithin(expenses: ExpenseResponse[], start: Date, end: Date):
   );
 }
 
-function inferCategory(sourceText: string): string {
+function inferCategory(sourceText: string, categoryCandidates: readonly string[]): string {
   const lowered = sourceText.toLowerCase();
+  const customCategories = categoryCandidates
+    .map((category) => normalizeCategoryInput(category))
+    .filter((category) => category && !DEFAULT_CATEGORY_SET.has(category));
+
+  for (const category of customCategories) {
+    const pattern = new RegExp(`\\b${escapeRegExp(category)}\\b`, "i");
+    if (pattern.test(lowered)) {
+      return category;
+    }
+  }
 
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const keyword of keywords) {

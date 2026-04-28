@@ -30,6 +30,7 @@ import {
   fetchAnalyticsSummary,
   fetchExpenses,
   fetchUsers,
+  exportExpensesCsv,
   getErrorMessage,
   scanReceiptExpense,
   updateExpense,
@@ -42,9 +43,11 @@ import {
 } from "@/lib/api";
 import {
   buildDashboardStats,
+  buildCategoryOptions,
   buildInsights,
   filterExpensesForPeriod,
   groupTransactionsByDate,
+  normalizeCategoryInput,
   parseExpenseDraft,
   type ThemeMode,
 } from "@/lib/dashboard";
@@ -105,6 +108,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [manualRefreshVersion, setManualRefreshVersion] = useState(0);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [hasLoadedCustomCategories, setHasLoadedCustomCategories] = useState(false);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
   const now = new Date();
@@ -130,6 +136,38 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem("spendly-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const storedCategories = window.localStorage.getItem("spendly-custom-categories");
+    if (storedCategories) {
+      try {
+        const parsedCategories = JSON.parse(storedCategories) as unknown;
+        if (Array.isArray(parsedCategories)) {
+          setCustomCategories(
+            parsedCategories
+              .filter((category): category is string => typeof category === "string")
+              .map(normalizeCategoryInput)
+              .filter(Boolean),
+          );
+        }
+      } catch {
+        setCustomCategories([]);
+      }
+    }
+
+    setHasLoadedCustomCategories(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedCustomCategories) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      "spendly-custom-categories",
+      JSON.stringify(customCategories),
+    );
+  }, [customCategories, hasLoadedCustomCategories]);
 
   useEffect(() => {
     if (!successToast) {
@@ -341,25 +379,36 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const groupedTransactions = groupTransactionsByDate(filteredExpenses);
   const currency =
     summary?.currency ?? categoryData?.currency ?? expenses[0]?.currency ?? "USD";
+  const categoryOptions = buildCategoryOptions({
+    customCategories,
+    observedCategories: [
+      ...expenses.map((expense) => expense.category),
+      ...(categoryData?.items.map((item) => item.category) ?? []),
+    ],
+  });
   const pageTitle = SECTION_TITLES[activeSection];
   const pageDescription = getPageDescription(activeSection, selectedUser);
   const searchPlaceholder = SECTION_SEARCH_PLACEHOLDERS[activeSection];
 
-  async function handleLogExpense(message: string) {
+  async function handleLogExpense(message: string, selectedCategory: string) {
     if (selectedUserId === null) {
       throw new Error("Select a Messenger user before logging an expense.");
     }
 
-    const preview = parseExpenseDraft(message);
+    const preview = parseExpenseDraft(
+      message,
+      categoryOptions.map((option) => option.value),
+    );
     if (!preview.success || preview.amount === null || preview.category === null) {
       throw new Error(preview.reason ?? "Spendly could not parse that message.");
     }
+    const category = normalizeCategoryInput(selectedCategory) || preview.category;
 
     await createExpense({
       user_id: selectedUserId,
       amount: preview.amount,
       currency: "USD",
-      category: preview.category,
+      category,
       note: preview.note,
       source_text: message,
       occurred_at: new Date().toISOString(),
@@ -367,6 +416,25 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
     setSuccessToast(`Logged "${message}" for ${selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || "the selected user"}.`);
     setManualRefreshVersion((current) => current + 1);
+  }
+
+  async function handleExportCsv() {
+    if (selectedUserId === null) {
+      setSuccessToast("Select a Messenger user before exporting CSV.");
+      return;
+    }
+
+    setIsExportingCsv(true);
+
+    try {
+      const { blob, fileName } = await exportExpensesCsv(selectedUserId);
+      downloadBlob(blob, fileName);
+      setSuccessToast(`Exported ${fileName}.`);
+    } catch (error) {
+      setSuccessToast(`Could not export CSV: ${getErrorMessage(error)}`);
+    } finally {
+      setIsExportingCsv(false);
+    }
   }
 
   async function handleAnalyzeReceipt(file: File): Promise<ReceiptScanResponse> {
@@ -471,6 +539,24 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     setHiddenCategories([]);
   }
 
+  function handleAddCustomCategory(value: string) {
+    const normalized = normalizeCategoryInput(value);
+    if (!normalized) {
+      return;
+    }
+
+    setCustomCategories((current) =>
+      current.includes(normalized) ? current : [...current, normalized],
+    );
+    setSuccessToast(`Added ${getCategoryLabelForToast(normalized)} category.`);
+  }
+
+  function handleDeleteCustomCategory(category: string) {
+    const normalized = normalizeCategoryInput(category);
+    setCustomCategories((current) => current.filter((item) => item !== normalized));
+    setSuccessToast(`Removed ${getCategoryLabelForToast(normalized)} from custom categories.`);
+  }
+
   let sectionContent: ReactNode;
 
   if (activeSection === "dashboard") {
@@ -570,9 +656,13 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         categoryData={categoryData}
         categoryError={categoryStatus === "error" ? categoryError : null}
         categoryStatus={categoryStatus}
+        categoryOptions={categoryOptions}
+        customCategories={customCategories}
         currentPeriodExpenses={currentPeriodExpenses}
         hiddenCategories={hiddenCategories}
         isDisabled={!hasUsers}
+        onAddCustomCategory={handleAddCustomCategory}
+        onDeleteCustomCategory={handleDeleteCustomCategory}
         onResetHiddenCategories={handleResetHiddenCategories}
         onSelectPeriod={handleSelectPeriod}
         onToggleCategory={(category) => {
@@ -594,7 +684,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
         expenseCount={expenses.length}
         hiddenCategoriesCount={hiddenCategories.length}
         lastSyncedAt={lastSyncedAt}
+        isExportingCsv={isExportingCsv}
         onClearSearch={() => setSearchQuery("")}
+        onExportCsv={() => void handleExportCsv()}
         onOpenLogModal={() => setIsLogModalOpen(true)}
         onRefreshNow={handleRefreshNow}
         onResetHiddenCategories={handleResetHiddenCategories}
@@ -714,6 +806,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       ) : null}
 
       <LogExpenseModal
+        categoryOptions={categoryOptions}
         isOpen={isLogModalOpen}
         selectedUserLabel={
           selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || null
@@ -723,6 +816,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       />
 
       <ReceiptScanModal
+        categoryOptions={categoryOptions}
         isOpen={isReceiptModalOpen}
         selectedUserLabel={
           selectedUser?.display_name?.trim() || selectedUser?.messenger_psid || null
@@ -733,6 +827,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       />
 
       <EditExpenseModal
+        categoryOptions={categoryOptions}
         expense={editingExpense}
         isOpen={editingExpense !== null}
         onClose={() => {
@@ -748,6 +843,26 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       />
     </div>
   );
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+function getCategoryLabelForToast(category: string): string {
+  return category
+    .split(/([\s_-]+)/)
+    .map((part) =>
+      /^[\s_-]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1),
+    )
+    .join("");
 }
 
 function getPageDescription(
