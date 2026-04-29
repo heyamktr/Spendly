@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 
 import type { ExpenseResponse, ExpenseUpdateInput } from "@/lib/api";
-import { EXPENSE_CATEGORIES } from "@/lib/dashboard";
+import { getCategoryLabel, type CategoryOption } from "@/lib/dashboard";
 import { CloseIcon } from "@/components/icons";
 
 type EditExpenseModalProps = {
+  categoryOptions: CategoryOption[];
   expense: ExpenseResponse | null;
   isOpen: boolean;
   onClose: () => void;
@@ -14,6 +15,7 @@ type EditExpenseModalProps = {
 };
 
 export function EditExpenseModal({
+  categoryOptions,
   expense,
   isOpen,
   onClose,
@@ -143,11 +145,14 @@ export function EditExpenseModal({
                 onChange={(event) => setCategory(event.target.value)}
                 className="h-12 w-full rounded-[20px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
               >
-                {EXPENSE_CATEGORIES.map((option) => (
-                  <option key={option} value={option}>
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                {categoryOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
+                {categoryOptions.every((option) => option.value !== category) ? (
+                  <option value={category}>{getCategoryLabel(category)}</option>
+                ) : null}
               </select>
             </label>
           </div>

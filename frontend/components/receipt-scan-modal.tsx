@@ -3,10 +3,11 @@
 import { useEffect, useState } from "react";
 
 import { formatCurrency, type ReceiptScanResponse } from "@/lib/api";
-import { EXPENSE_CATEGORIES, getCategoryLabel } from "@/lib/dashboard";
+import { getCategoryLabel, type CategoryOption } from "@/lib/dashboard";
 import { CloseIcon, ReceiptIcon } from "@/components/icons";
 
 type ReceiptScanModalProps = {
+  categoryOptions: CategoryOption[];
   isOpen: boolean;
   selectedUserLabel: string | null;
   onAnalyze: (file: File) => Promise<ReceiptScanResponse>;
@@ -20,6 +21,7 @@ type ReceiptScanModalProps = {
 };
 
 export function ReceiptScanModal({
+  categoryOptions,
   isOpen,
   selectedUserLabel,
   onAnalyze,
@@ -269,11 +271,14 @@ export function ReceiptScanModal({
                       onChange={(event) => setCategory(event.target.value)}
                       className="h-12 w-full rounded-[18px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 text-sm text-[var(--text-primary)] outline-none transition focus:border-[var(--accent-primary)] focus:shadow-[0_0_0_4px_var(--accent-ring)]"
                     >
-                      {EXPENSE_CATEGORIES.map((option) => (
-                        <option key={option} value={option}>
-                          {getCategoryLabel(option)}
+                      {categoryOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
                         </option>
                       ))}
+                      {categoryOptions.every((option) => option.value !== category) ? (
+                        <option value={category}>{getCategoryLabel(category)}</option>
+                      ) : null}
                     </select>
                   </label>
 

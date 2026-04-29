@@ -1,6 +1,9 @@
+import csv
+from io import StringIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,6 +12,8 @@ from app.schemas.receipt import ReceiptScanRequest, ReceiptScanResponse
 from app.services import expense_service, receipt_service, user_service
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
+
+CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 @router.get("", response_model=list[ExpenseResponse])
@@ -23,6 +28,55 @@ def list_expenses(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
 
     return expense_service.list_expenses(db, user_id=user_id, limit=limit, offset=offset)
+
+
+@router.get("/export.csv")
+def export_expenses_csv(
+    user_id: Annotated[int, Query(gt=0)],
+    db: Session = Depends(get_db),
+) -> Response:
+    user = user_service.get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user not found")
+
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "id",
+            "user_id",
+            "amount",
+            "currency",
+            "category",
+            "note",
+            "source_text",
+            "occurred_at",
+            "created_at",
+        ]
+    )
+
+    for expense in expense_service.list_all_expenses(db, user_id=user_id):
+        writer.writerow(
+            [
+                expense.id,
+                expense.user_id,
+                format(expense.amount, "f"),
+                _csv_cell(expense.currency),
+                _csv_cell(expense.category),
+                _csv_cell(expense.note),
+                _csv_cell(expense.source_text),
+                expense.occurred_at.isoformat(),
+                expense.created_at.isoformat(),
+            ]
+        )
+
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="spendly-user-{user_id}-expenses.csv"',
+        },
+    )
 
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
@@ -78,3 +132,13 @@ def delete_expense(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="expense not found")
 
     expense_service.delete_expense(db, expense=expense)
+
+
+def _csv_cell(value: str | None) -> str:
+    if value is None:
+        return ""
+
+    if value.startswith(CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+
+    return value

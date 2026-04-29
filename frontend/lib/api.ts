@@ -191,6 +191,26 @@ export async function deleteExpense(expenseId: number): Promise<void> {
   });
 }
 
+export async function exportExpensesCsv(
+  userId: number,
+): Promise<{ blob: Blob; fileName: string }> {
+  const response = await fetchResponse(
+    `/api/expenses/export.csv${buildQuery({ user_id: userId })}`,
+    {
+      headers: {
+        Accept: "text/csv",
+      },
+    },
+  );
+
+  return {
+    blob: await response.blob(),
+    fileName:
+      parseContentDispositionFileName(response.headers.get("Content-Disposition")) ??
+      `spendly-user-${userId}-expenses.csv`,
+  };
+}
+
 export function toNumber(value: MoneyValue): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -242,8 +262,23 @@ async function fetchJson<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const response = await fetchResponse(path, init);
+
+  if (response.status === 204) {
+    return null as T;
+  }
+
+  return (await response.json()) as T;
+}
+
+async function fetchResponse(
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
   const headers = new Headers(init?.headers);
-  headers.set("Accept", "application/json");
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
 
   const response = await fetch(new URL(path, `${getApiBaseUrl()}/`), {
     ...init,
@@ -255,11 +290,7 @@ async function fetchJson<T>(
     throw new ApiError(await readErrorMessage(response), response.status);
   }
 
-  if (response.status === 204) {
-    return null as T;
-  }
-
-  return (await response.json()) as T;
+  return response;
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
@@ -290,4 +321,13 @@ function buildQuery(
 
   const query = searchParams.toString();
   return query ? `?${query}` : "";
+}
+
+function parseContentDispositionFileName(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? null;
 }
