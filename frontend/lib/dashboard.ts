@@ -49,6 +49,20 @@ export type CategoryOption = {
   source: "default" | "custom" | "observed";
 };
 
+export type DateWindowMode = AnalyticsPeriod | "custom";
+
+export type CustomDateRange = {
+  start: string;
+  end: string;
+};
+
+export type ResolvedDateWindow = {
+  start: Date;
+  end: Date;
+  label: string;
+  mode: DateWindowMode;
+};
+
 export const EXPENSE_CATEGORIES = [
   "food",
   "transport",
@@ -264,6 +278,115 @@ export function filterExpensesForPeriod(
 
     return haystack.includes(normalizedQuery);
   });
+}
+
+export function filterExpensesForDateWindow(
+  expenses: ExpenseResponse[],
+  window: ResolvedDateWindow,
+  query: string,
+): ExpenseResponse[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return expenses.filter((expense) => {
+    const occurredAt = new Date(expense.occurred_at);
+    if (occurredAt < window.start || occurredAt >= window.end) {
+      return false;
+    }
+
+    if (!normalizedQuery) {
+      return true;
+    }
+
+    const haystack = [
+      expense.category,
+      expense.note ?? "",
+      expense.source_text,
+      getTransactionTitle(expense),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(normalizedQuery);
+  });
+}
+
+export function buildCategoryDataFromExpenses({
+  currency,
+  expenses,
+  period,
+  userId,
+}: {
+  currency: string;
+  expenses: ExpenseResponse[];
+  period: AnalyticsPeriod;
+  userId: number;
+}): AnalyticsByCategoryResponse {
+  const totals = expenses.reduce<Record<string, number>>((items, expense) => {
+    items[expense.category] = (items[expense.category] ?? 0) + toNumber(expense.amount);
+    return items;
+  }, {});
+
+  return {
+    user_id: userId,
+    period,
+    currency,
+    items: Object.entries(totals)
+      .map(([category, total]) => ({
+        category,
+        total,
+      }))
+      .sort((left, right) => toNumber(right.total) - toNumber(left.total)),
+  };
+}
+
+export function getDefaultCustomDateRange(now: Date): CustomDateRange {
+  return {
+    start: toDateInputValue(addUtcDays(startOfUtcDay(now), -29)),
+    end: toDateInputValue(now),
+  };
+}
+
+export function resolveDateWindow({
+  customRange,
+  mode,
+  now,
+  period,
+}: {
+  customRange: CustomDateRange;
+  mode: DateWindowMode;
+  now: Date;
+  period: AnalyticsPeriod;
+}): ResolvedDateWindow {
+  if (mode !== "custom") {
+    const range = getPeriodRange(period, now);
+    return {
+      start: range.currentStart,
+      end: now,
+      label: range.currentLabel,
+      mode,
+    };
+  }
+
+  const start = parseDateInputStart(customRange.start) ?? addUtcDays(startOfUtcDay(now), -29);
+  const rawEnd = parseDateInputStart(customRange.end) ?? startOfUtcDay(now);
+  const end = addUtcDays(rawEnd, 1);
+
+  if (start >= end) {
+    const fallbackEnd = addUtcDays(start, 1);
+    return {
+      start,
+      end: fallbackEnd,
+      label: formatDateWindowLabel(start, fallbackEnd),
+      mode,
+    };
+  }
+
+  return {
+    start,
+    end,
+    label: formatDateWindowLabel(start, end),
+    mode,
+  };
 }
 
 export function groupTransactionsByDate(expenses: ExpenseResponse[]): TransactionGroup[] {
@@ -750,6 +873,49 @@ function addUtcDays(value: Date, days: number): Date {
 
 function addUtcMonths(value: Date, months: number): Date {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + months, 1));
+}
+
+function parseDateInputStart(value: string): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function toDateInputValue(value: Date): string {
+  return [
+    value.getUTCFullYear(),
+    String(value.getUTCMonth() + 1).padStart(2, "0"),
+    String(value.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function formatDateWindowLabel(start: Date, exclusiveEnd: Date): string {
+  const inclusiveEnd = addUtcDays(exclusiveEnd, -1);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: start.getUTCFullYear() === inclusiveEnd.getUTCFullYear() ? undefined : "numeric",
+    timeZone: "UTC",
+  });
+  const endFormatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  if (toDateInputValue(start) === toDateInputValue(inclusiveEnd)) {
+    return endFormatter.format(start);
+  }
+
+  return `${formatter.format(start)} - ${endFormatter.format(inclusiveEnd)}`;
 }
 
 function escapeRegExp(value: string): string {

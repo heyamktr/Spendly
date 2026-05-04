@@ -25,12 +25,15 @@ import {
   normalizeCategoryInput,
   type CategoryOption,
   type DashboardStat,
+  type DateWindowMode,
   type InsightItem,
   type ThemeMode,
 } from "@/lib/dashboard";
 
 type AnalyticsWorkspaceProps = {
   activePeriod: AnalyticsPeriod;
+  dateWindowLabel: string;
+  dateWindowMode: DateWindowMode;
   categoryData: AnalyticsByCategoryResponse | null;
   categoryError: string | null;
   categoryStatus: "idle" | "loading" | "success" | "error";
@@ -49,6 +52,8 @@ type AnalyticsWorkspaceProps = {
 
 type CategoriesWorkspaceProps = {
   activePeriod: AnalyticsPeriod;
+  dateWindowLabel: string;
+  dateWindowMode: DateWindowMode;
   categoryData: AnalyticsByCategoryResponse | null;
   categoryError: string | null;
   categoryOptions: CategoryOption[];
@@ -109,6 +114,8 @@ type CategoryCard = {
 
 export function AnalyticsWorkspace({
   activePeriod,
+  dateWindowLabel,
+  dateWindowMode,
   categoryData,
   categoryError,
   categoryStatus,
@@ -155,7 +162,7 @@ export function AnalyticsWorkspace({
     <div className="flex flex-col gap-6">
       <SummaryCards
         stats={stats}
-        activePeriod={activePeriod}
+        activePeriod={dateWindowMode}
         currency={currency}
         isLoading={detailsStatus === "loading"}
         error={detailsStatus === "error" ? detailsError : null}
@@ -189,7 +196,7 @@ export function AnalyticsWorkspace({
           </h3>
           <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
             Spendly distills velocity, ticket size, and concentration into a quick
-            read for the current {activePeriod} window.
+            read for the current {dateWindowLabel} window.
           </p>
 
           {detailsStatus === "error" ? (
@@ -203,7 +210,7 @@ export function AnalyticsWorkspace({
             <DisabledMessage message="Select a Messenger user to unlock deeper analytics." />
           ) : transactionCount === 0 ? (
             <DisabledMessage
-              message={`No expenses have landed in this ${activePeriod} window yet, so Spendly has nothing to compare.`}
+              message={`No expenses have landed in this ${dateWindowLabel} window yet, so Spendly has nothing to compare.`}
             />
           ) : (
             <>
@@ -236,7 +243,7 @@ export function AnalyticsWorkspace({
                   value={topCategory ? `${Math.round(topCategoryShare)}%` : "--"}
                   caption={
                     topCategory
-                      ? `${getCategoryLabel(topCategory.category)} leads ${activePeriod} spend`
+                      ? `${getCategoryLabel(topCategory.category)} leads ${dateWindowLabel} spend`
                       : "Waiting for category data"
                   }
                 />
@@ -267,7 +274,8 @@ export function AnalyticsWorkspace({
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <CategoryChart
           categoryData={categoryData}
-          period={activePeriod}
+          period={dateWindowMode}
+          periodLabel={dateWindowLabel}
           onPeriodChange={onSelectPeriod}
           isLoading={categoryStatus === "loading"}
           error={categoryStatus === "error" ? categoryError : null}
@@ -308,8 +316,8 @@ export function AnalyticsWorkspace({
             <DisabledMessage
               message={
                 searchQuery
-                  ? `No merchants or notes match "${searchQuery}" in this ${activePeriod} window.`
-                  : `No merchant patterns are available for this ${activePeriod} window yet.`
+                  ? `No merchants or notes match "${searchQuery}" in this ${dateWindowLabel} window.`
+                  : `No merchant patterns are available for this ${dateWindowLabel} window yet.`
               }
             />
           ) : (
@@ -355,6 +363,8 @@ export function AnalyticsWorkspace({
 
 export function CategoriesWorkspace({
   activePeriod,
+  dateWindowLabel,
+  dateWindowMode,
   categoryData,
   categoryError,
   categoryOptions,
@@ -399,7 +409,8 @@ export function CategoriesWorkspace({
     <div className="flex flex-col gap-6">
       <CategoryChart
         categoryData={categoryData}
-        period={activePeriod}
+        period={dateWindowMode}
+        periodLabel={dateWindowLabel}
         onPeriodChange={onSelectPeriod}
         isLoading={categoryStatus === "loading"}
         error={categoryStatus === "error" ? categoryError : null}
@@ -460,8 +471,8 @@ export function CategoriesWorkspace({
             <DisabledMessage
               message={
                 searchQuery
-                  ? `No categories match "${searchQuery}" in this ${activePeriod} view.`
-                  : `Spendly has not seen any category totals for this ${activePeriod} view yet.`
+                  ? `No categories match "${searchQuery}" in this ${dateWindowLabel} view.`
+                  : `Spendly has not seen any category totals for this ${dateWindowLabel} view yet.`
               }
             />
           ) : (

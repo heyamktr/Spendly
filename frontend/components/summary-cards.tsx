@@ -6,12 +6,13 @@ import { formatCurrency } from "@/lib/api";
 import {
   buildSparklinePath,
   type DashboardStat,
+  type DateWindowMode,
   type StatTone,
 } from "@/lib/dashboard";
 
 type SummaryCardsProps = {
   stats: DashboardStat[];
-  activePeriod: "day" | "week" | "month";
+  activePeriod: DateWindowMode;
   currency: string;
   isLoading: boolean;
   error: string | null;

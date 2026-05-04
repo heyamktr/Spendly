@@ -10,6 +10,7 @@ import {
 
 import { CategoryChart } from "@/components/category-chart";
 import { DashboardHeader } from "@/components/dashboard-header";
+import { DateWindowControls } from "@/components/date-window-controls";
 import { EditExpenseModal } from "@/components/edit-expense-modal";
 import { InsightsPanel } from "@/components/insights-panel";
 import { LogExpenseModal } from "@/components/log-expense-modal";
@@ -43,12 +44,17 @@ import {
 } from "@/lib/api";
 import {
   buildDashboardStats,
+  buildCategoryDataFromExpenses,
   buildCategoryOptions,
   buildInsights,
-  filterExpensesForPeriod,
+  filterExpensesForDateWindow,
+  getDefaultCustomDateRange,
   groupTransactionsByDate,
   normalizeCategoryInput,
   parseExpenseDraft,
+  resolveDateWindow,
+  type CustomDateRange,
+  type DateWindowMode,
   type ThemeMode,
 } from "@/lib/dashboard";
 import { PlusIcon, ReceiptIcon } from "@/components/icons";
@@ -86,6 +92,10 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
   const [activePeriod, setActivePeriod] = useState<AnalyticsPeriod>("month");
+  const [dateWindowMode, setDateWindowMode] = useState<DateWindowMode>("month");
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange>(() =>
+    getDefaultCustomDateRange(new Date()),
+  );
   const [summary, setSummary] = useState<AnalyticsSummaryResponse | null>(null);
   const [expenses, setExpenses] = useState<ExpenseResponse[]>([]);
   const [detailsStatus, setDetailsStatus] = useState<LoadStatus>("idle");
@@ -368,17 +378,37 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     users.find((user) => user.id === selectedUserId) ?? null;
   const hasUsers = users.length > 0;
   const stats = buildDashboardStats(summary, expenses, now);
-  const insights = buildInsights(summary, categoryData, expenses, activePeriod, now);
-  const currentPeriodExpenses = filterExpensesForPeriod(expenses, activePeriod, "", now);
-  const filteredExpenses = filterExpensesForPeriod(
-    expenses,
-    activePeriod,
-    deferredSearchQuery,
+  const dateWindow = resolveDateWindow({
+    customRange: customDateRange,
+    mode: dateWindowMode,
     now,
+    period: activePeriod,
+  });
+  const currentPeriodExpenses = filterExpensesForDateWindow(expenses, dateWindow, "");
+  const filteredExpenses = filterExpensesForDateWindow(
+    expenses,
+    dateWindow,
+    deferredSearchQuery,
   );
   const groupedTransactions = groupTransactionsByDate(filteredExpenses);
   const currency =
     summary?.currency ?? categoryData?.currency ?? expenses[0]?.currency ?? "USD";
+  const displayCategoryData =
+    dateWindowMode === "custom" && selectedUserId !== null
+      ? buildCategoryDataFromExpenses({
+          currency,
+          expenses: currentPeriodExpenses,
+          period: activePeriod,
+          userId: selectedUserId,
+        })
+      : categoryData;
+  const insights = buildInsights(
+    summary,
+    displayCategoryData,
+    expenses,
+    dateWindowMode === "custom" ? "month" : activePeriod,
+    now,
+  );
   const categoryOptions = buildCategoryOptions({
     customCategories,
     observedCategories: [
@@ -522,6 +552,13 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   function handleSelectPeriod(nextPeriod: AnalyticsPeriod) {
     startTransition(() => {
       setActivePeriod(nextPeriod);
+      setDateWindowMode(nextPeriod);
+    });
+  }
+
+  function handleSelectDateWindowMode(nextMode: DateWindowMode) {
+    startTransition(() => {
+      setDateWindowMode(nextMode);
     });
   }
 
@@ -564,7 +601,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
       <>
         <SummaryCards
           stats={stats}
-          activePeriod={activePeriod}
+          activePeriod={dateWindowMode}
           currency={currency}
           isLoading={detailsStatus === "loading"}
           error={detailsStatus === "error" ? detailsError : null}
@@ -590,8 +627,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <CategoryChart
-            categoryData={categoryData}
-            period={activePeriod}
+            categoryData={displayCategoryData}
+            period={dateWindowMode}
+            periodLabel={dateWindow.label}
             onPeriodChange={handleSelectPeriod}
             isLoading={categoryStatus === "loading"}
             error={categoryStatus === "error" ? categoryError : null}
@@ -611,7 +649,8 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
             isLoading={detailsStatus === "loading"}
             error={detailsStatus === "error" ? detailsError : null}
             isDisabled={!hasUsers}
-            period={activePeriod}
+            period={dateWindowMode}
+            periodLabel={dateWindow.label}
             query={searchQuery}
             onQueryChange={setSearchQuery}
             busyExpenseId={busyExpenseId}
@@ -627,7 +666,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     sectionContent = (
       <AnalyticsWorkspace
         activePeriod={activePeriod}
-        categoryData={categoryData}
+        dateWindowLabel={dateWindow.label}
+        dateWindowMode={dateWindowMode}
+        categoryData={displayCategoryData}
         categoryError={categoryStatus === "error" ? categoryError : null}
         categoryStatus={categoryStatus}
         currency={currency}
@@ -653,7 +694,9 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
     sectionContent = (
       <CategoriesWorkspace
         activePeriod={activePeriod}
-        categoryData={categoryData}
+        dateWindowLabel={dateWindow.label}
+        dateWindowMode={dateWindowMode}
+        categoryData={displayCategoryData}
         categoryError={categoryStatus === "error" ? categoryError : null}
         categoryStatus={categoryStatus}
         categoryOptions={categoryOptions}
@@ -745,6 +788,16 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
                 }}
                 isLoading={usersStatus === "loading"}
                 isDisabled={!hasUsers}
+              />
+
+              <DateWindowControls
+                customRange={customDateRange}
+                disabled={!hasUsers}
+                mode={dateWindowMode}
+                windowLabel={dateWindow.label}
+                onCustomRangeChange={setCustomDateRange}
+                onModeChange={handleSelectDateWindowMode}
+                onPeriodChange={handleSelectPeriod}
               />
 
               {usersStatus === "error" ? (
