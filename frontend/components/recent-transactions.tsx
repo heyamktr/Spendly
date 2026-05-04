@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 
-import { formatCurrency, type AnalyticsPeriod, type ExpenseResponse } from "@/lib/api";
+import { formatCurrency, type ExpenseResponse } from "@/lib/api";
 import {
   formatAbsoluteTime,
   formatRelativeTime,
   getCategoryEmoji,
   getCategoryLabel,
   getTransactionTitle,
+  type DateWindowMode,
   type TransactionGroup,
 } from "@/lib/dashboard";
 import { DeleteIcon, EditIcon, SearchIcon } from "@/components/icons";
@@ -16,7 +17,8 @@ type RecentTransactionsProps = {
   isLoading: boolean;
   error: string | null;
   isDisabled: boolean;
-  period: AnalyticsPeriod;
+  period: DateWindowMode;
+  periodLabel?: string;
   query: string;
   onQueryChange: (value: string) => void;
   busyExpenseId: number | null;
@@ -30,6 +32,7 @@ export function RecentTransactions({
   error,
   isDisabled,
   period,
+  periodLabel,
   query,
   onQueryChange,
   busyExpenseId,
@@ -50,7 +53,7 @@ export function RecentTransactions({
               Premium activity feed
             </h3>
             <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              Reviewing the {period} window with grouped dates, contextual metadata,
+              Reviewing the {periodLabel ?? period} window with grouped dates, contextual metadata,
               and live filtering.
             </p>
           </div>

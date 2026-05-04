@@ -3,11 +3,12 @@
 import { useState } from "react";
 
 import { formatCurrency, toNumber, type AnalyticsByCategoryResponse, type AnalyticsPeriod } from "@/lib/api";
-import { getCategoryAccent, getCategoryLabel } from "@/lib/dashboard";
+import { getCategoryAccent, getCategoryLabel, type DateWindowMode } from "@/lib/dashboard";
 
 type CategoryChartProps = {
   categoryData: AnalyticsByCategoryResponse | null;
-  period: AnalyticsPeriod;
+  period: DateWindowMode;
+  periodLabel?: string;
   onPeriodChange: (period: AnalyticsPeriod) => void;
   isLoading: boolean;
   error: string | null;
@@ -21,6 +22,7 @@ const PERIOD_OPTIONS: AnalyticsPeriod[] = ["day", "week", "month"];
 export function CategoryChart({
   categoryData,
   period,
+  periodLabel,
   onPeriodChange,
   isLoading,
   error,
@@ -99,7 +101,7 @@ export function CategoryChart({
           </div>
         ) : categoryData.items.length === 0 ? (
           <div className="rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-elevated)] p-6 text-sm leading-6 text-[var(--text-tertiary)]">
-            No category totals yet for this {period}. Once new expenses land, Spendly
+            No category totals yet for this {periodLabel ?? period}. Once new expenses land, Spendly
             will build the distribution automatically.
           </div>
         ) : (
