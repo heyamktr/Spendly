@@ -28,7 +28,7 @@ export function InsightsPanel({
 
         <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
           <SparkleIcon className="h-4 w-4 text-[var(--accent-primary)]" />
-          AI-style readout
+          Auto-generated
         </div>
       </div>
 

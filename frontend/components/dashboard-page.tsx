@@ -58,6 +58,7 @@ import {
   type ThemeMode,
 } from "@/lib/dashboard";
 import { PlusIcon, ReceiptIcon } from "@/components/icons";
+import { MobileNav } from "@/components/mobile-nav";
 
 type DashboardPageProps = {
   apiBaseUrl: string;
@@ -531,13 +532,6 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
   }
 
   async function handleDeleteExpense(expense: ExpenseResponse) {
-    const confirmed = window.confirm(
-      `Delete "${expense.note?.trim() || expense.source_text}"? This cannot be undone.`,
-    );
-    if (!confirmed) {
-      return;
-    }
-
     setBusyExpenseId(expense.id);
 
     try {
@@ -658,6 +652,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
             onDeleteExpense={(expense) => {
               void handleDeleteExpense(expense);
             }}
+            onLogExpense={() => setIsLogModalOpen(true)}
           />
         </div>
       </>
@@ -760,7 +755,6 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <DashboardHeader
-            apiBaseUrl={apiBaseUrl}
             pageDescription={pageDescription}
             pageTitle={pageTitle}
             refreshIntervalSeconds={DASHBOARD_REFRESH_INTERVAL_MS / 1_000}
@@ -776,7 +770,7 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
             onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
           />
 
-          <main className="flex-1 px-4 pb-24 pt-6 md:px-8">
+          <main className="flex-1 px-4 pb-40 pt-6 md:px-8 xl:pb-24">
             <div className="mx-auto flex max-w-[1480px] flex-col gap-6">
               <UserSelector
                 users={users}
@@ -894,6 +888,8 @@ export function DashboardPage({ apiBaseUrl }: DashboardPageProps) {
           setEditingExpense(null);
         }}
       />
+
+      <MobileNav activeSection={activeSection} onSelectSection={handleSelectSection} />
     </div>
   );
 }

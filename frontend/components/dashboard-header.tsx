@@ -3,10 +3,9 @@
 import { useEffect, useRef } from "react";
 
 import type { ThemeMode } from "@/lib/dashboard";
-import { BellIcon, MoonIcon, SearchIcon, SidebarToggleIcon, SunIcon } from "@/components/icons";
+import { MoonIcon, SearchIcon, SidebarToggleIcon, SunIcon } from "@/components/icons";
 
 type DashboardHeaderProps = {
-  apiBaseUrl: string;
   pageDescription: string;
   pageTitle: string;
   refreshIntervalSeconds: number;
@@ -19,7 +18,6 @@ type DashboardHeaderProps = {
 };
 
 export function DashboardHeader({
-  apiBaseUrl,
   pageDescription,
   pageTitle,
   refreshIntervalSeconds,
@@ -59,12 +57,10 @@ export function DashboardHeader({
             </button>
 
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
-                  Live workspace
-                </span>
-                <span className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent-primary)]">
-                  Sync {refreshIntervalSeconds}s
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--accent-primary)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent-primary)]" />
+                  Live · {refreshIntervalSeconds}s
                 </span>
               </div>
               <h1 className="mt-3 truncate text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)] md:text-[2rem]">
@@ -76,16 +72,6 @@ export function DashboardHeader({
             </div>
           </div>
 
-          <div className="hidden items-center gap-2 lg:flex">
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] px-4 py-3 shadow-[var(--shadow-soft)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
-                API
-              </p>
-              <code className="mt-1 block text-xs text-[var(--text-secondary)]">
-                {apiBaseUrl}
-              </code>
-            </div>
-          </div>
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -104,15 +90,6 @@ export function DashboardHeader({
           </label>
 
           <div className="flex items-center gap-2 self-end lg:self-auto">
-            <button
-              type="button"
-              className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-card)] text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
-              aria-label="Notifications"
-            >
-              <BellIcon className="h-5 w-5" />
-              <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-[var(--accent-coral)]" />
-            </button>
-
             <button
               type="button"
               onClick={onToggleTheme}

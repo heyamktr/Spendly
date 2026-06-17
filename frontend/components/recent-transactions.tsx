@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { formatCurrency, type ExpenseResponse } from "@/lib/api";
 import {
@@ -24,6 +24,7 @@ type RecentTransactionsProps = {
   busyExpenseId: number | null;
   onEditExpense: (expense: ExpenseResponse) => void;
   onDeleteExpense: (expense: ExpenseResponse) => void;
+  onLogExpense: () => void;
 };
 
 export function RecentTransactions({
@@ -38,6 +39,7 @@ export function RecentTransactions({
   busyExpenseId,
   onEditExpense,
   onDeleteExpense,
+  onLogExpense,
 }: RecentTransactionsProps) {
   const itemCount = groups.reduce((total, group) => total + group.items.length, 0);
 
@@ -50,12 +52,8 @@ export function RecentTransactions({
               Transactions
             </p>
             <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Premium activity feed
+              {periodLabel ?? period}
             </h3>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              Reviewing the {periodLabel ?? period} window with grouped dates, contextual metadata,
-              and live filtering.
-            </p>
           </div>
 
           <div className="relative w-full max-w-sm">
@@ -88,12 +86,11 @@ export function RecentTransactions({
             Select a Messenger user to inspect the live transaction feed.
           </div>
         ) : itemCount === 0 ? (
-          <EmptyState query={query} />
+          <EmptyState query={query} onLogExpense={onLogExpense} />
         ) : (
           <div className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="mb-4 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-              <span>{itemCount} rows visible</span>
-              <span>Hover a row for quick actions</span>
+              <span>{itemCount} {itemCount === 1 ? "transaction" : "transactions"}</span>
             </div>
 
             <div className="hide-scrollbar flex-1 space-y-4 overflow-y-auto pr-1">
@@ -140,6 +137,8 @@ function TransactionRow({
   onEditExpense: (expense: ExpenseResponse) => void;
   onDeleteExpense: (expense: ExpenseResponse) => void;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   return (
     <article className="group relative overflow-hidden rounded-[24px] border border-[var(--border-subtle)] bg-[var(--surface-elevated)] px-4 py-4 shadow-[var(--shadow-soft)] transition hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-strong)]">
       <div className="flex items-start gap-4">
@@ -176,20 +175,44 @@ function TransactionRow({
         </div>
       </div>
 
-      <div className="absolute inset-y-0 right-0 flex translate-x-6 items-center gap-2 pr-4 opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:opacity-100">
-        <ActionHint
-          icon={<EditIcon className="h-4 w-4" />}
-          label={isBusy ? "Working..." : "Edit"}
-          onClick={() => onEditExpense(expense)}
-          disabled={isBusy}
-        />
-        <ActionHint
-          icon={<DeleteIcon className="h-4 w-4" />}
-          label={isBusy ? "Working..." : "Delete"}
-          onClick={() => onDeleteExpense(expense)}
-          disabled={isBusy}
-        />
-      </div>
+      {confirmingDelete ? (
+        <div className="mt-3 flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-3">
+          <span className="mr-auto text-xs text-[var(--text-secondary)]">Delete this expense?</span>
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(false)}
+            className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-card)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition hover:text-[var(--text-primary)]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmingDelete(false);
+              onDeleteExpense(expense);
+            }}
+            disabled={isBusy}
+            className="rounded-full bg-[var(--danger-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--danger-text)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isBusy ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      ) : (
+        <div className="absolute inset-y-0 right-0 flex translate-x-6 items-center gap-2 pr-4 opacity-0 transition duration-300 group-hover:translate-x-0 group-hover:opacity-100">
+          <ActionHint
+            icon={<EditIcon className="h-4 w-4" />}
+            label={isBusy ? "Working..." : "Edit"}
+            onClick={() => onEditExpense(expense)}
+            disabled={isBusy}
+          />
+          <ActionHint
+            icon={<DeleteIcon className="h-4 w-4" />}
+            label="Delete"
+            onClick={() => setConfirmingDelete(true)}
+            disabled={isBusy}
+          />
+        </div>
+      )}
     </article>
   );
 }
@@ -218,26 +241,27 @@ function ActionHint({
   );
 }
 
-function EmptyState({ query }: { query: string }) {
+function EmptyState({ query, onLogExpense }: { query: string; onLogExpense: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center rounded-[28px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-elevated)] px-8 py-12 text-center">
       <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[var(--surface-card)] text-4xl shadow-[var(--shadow-soft)]">
         {"\u2615"}
       </div>
       <h4 className="mt-6 text-xl font-semibold tracking-[-0.02em] text-[var(--text-primary)]">
-        {query ? "No matches in this feed" : "No transactions yet"}
+        {query ? "No results found" : "No transactions yet"}
       </h4>
       <p className="mt-3 max-w-sm text-sm leading-6 text-[var(--text-secondary)]">
         {query
-          ? "Try a different merchant, note, or category keyword and Spendly will filter results as you type."
-          : "Send 'coffee 5' to your bot to get started. New entries will land here automatically with the live refresh loop."}
+          ? "Try a different keyword, merchant, or category."
+          : "Log your first expense manually or send a message to your Messenger bot."}
       </p>
       {!query ? (
         <button
           type="button"
-          className="mt-6 rounded-full bg-[var(--accent-primary)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)]"
+          onClick={onLogExpense}
+          className="mt-6 rounded-full bg-[var(--accent-primary)] px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-soft)] transition hover:brightness-105"
         >
-          Send "coffee 5" to your bot to get started
+          Log your first expense
         </button>
       ) : null}
     </div>

@@ -85,14 +85,13 @@ export function LogExpenseModal({
         <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-tertiary)]">
-              Log expense
+              New expense
             </p>
             <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-[var(--text-primary)]">
-              Simulate the Messenger bot flow
+              Log an expense
             </h3>
             <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-              Type the same compact message you would send in Messenger. Spendly will
-              preview how it parses before saving.
+              Type a short message like you would in Messenger. Spendly will parse and preview it before saving.
             </p>
           </div>
 
@@ -203,8 +202,7 @@ export function LogExpenseModal({
             </button>
 
             <p className="mt-3 text-xs leading-5 text-[var(--text-tertiary)]">
-              This uses the existing manual expense endpoint, while keeping the same
-              natural-language entry style as Messenger.
+              Expenses are saved instantly and appear in your dashboard.
             </p>
           </div>
         </div>

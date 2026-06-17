@@ -70,7 +70,7 @@ export function SpendlySidebar({
                 Spendly
               </p>
               <p className="truncate text-xs text-[var(--text-tertiary)]">
-                Fintech command center
+                Expense tracker
               </p>
             </div>
           ) : null}
